@@ -18,8 +18,10 @@ import os
 import cPickle as pickle
 from docopt import docopt
 import yaml
+from tqdm import tqdm
 
 import pnr.config as CONFIG
+from pnr.roles import *
 
 
 def gameclock_to_str(gameclock):
@@ -95,6 +97,58 @@ def script_anno_rev0():
     annotations.to_csv(os.path.join(pnr_dir, 'gt/annotations.csv'), index=False)
 
 
+def annotate_roles():
+    """
+    Use underlying logic to determine:
+    - ball-handler
+    - ball-defender
+    - screen-setter
+    - screen-defender
+    """
+    movement_headers = [
+        "team_id",
+        "player_id",
+        "x_loc",
+        "y_loc",
+        "radius",
+        "game_clock",
+        "shot_clock",
+        "quarter",
+        "game_id",
+        "event_id"
+    ]
+    annotations_with_roles = pd.DataFrame()
+
+    if not os.path.exists('%s/roles/' % pnr_dir):
+        os.makedirs('%s/roles/' % pnr_dir)
+
+    missed_count = 0
+    annotations = pd.read_csv(os.path.join(pnr_dir, 'gt/annotations.csv'))
+    game_ids = annotations.loc[:,'gameid'].drop_duplicates(inplace=False).values
+    for game_id in tqdm(game_ids):
+        game = pd.read_pickle(os.path.join(game_dir, '00' + str(game_id) + '.pkl'))
+        game_annotations = annotations.loc[annotations.gameid == game_id, :]
+        for ind, annotation in game_annotations.iterrows():
+            moments = []
+            movement_data = game['events'][annotation['eid']]['moments']
+            for moment in movement_data:
+                for player in moment[5]:
+                    player.extend([moment[2], moment[3], moment[0], game_id, annotation['eid']])
+                    player = player[:len(movement_headers)]
+                    moments.append(player)
+
+            try:
+                movement_data = pd.DataFrame(data=moments, columns=movement_headers)
+                annotation = get_roles(annotation, movement_data, data_config)
+                if annotation is None:
+                    missed_count += 1
+                    continue
+                annotations_with_roles = annotations_with_roles.append(annotation)
+            except Exception as err:
+                continue
+    print('Missed %s annotations' % str(missed_count))
+    annotations_with_roles.to_csv(os.path.join(pnr_dir, 'roles/annotations.csv'), index=False)
+
 def raw_to_gt_format():
     """
     Read raw annotation files to convert to output similar to the output from make_raw_from_untrained
@@ -121,5 +175,6 @@ if __name__ == '__main__':
 
     from pnr.data.constant import data_dir, game_dir
     pnr_dir = os.path.join(game_dir, 'pnr-annotations')
-    script_anno_rev0()
-    raw_to_gt_format()
+    # script_anno_rev0()
+    annotate_roles()
+    # raw_to_gt_format()

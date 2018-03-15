@@ -11,3 +11,4 @@ pnr.egg-info/**
 **/venv/**
 **/logs/**
 **/saves/**
+*.py~

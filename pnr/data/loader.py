@@ -51,7 +51,7 @@ class BaseLoader:
                         anno = func[j]()
                         e = Event(self.dataset.games[anno['gameid']][
                                   'events'][anno['eid']], gameid=anno['gameid'])
-                        e.sequence_around_t(anno, self.dataset.tfr, from_beginning=True)  # EventException
+                        e.sequence_around_t(anno, self.dataset.tfr)  # EventException
                         if extract:
                             # ExtractorException
                             ret_val.append(self.extractor.extract(e))
@@ -86,7 +86,7 @@ class BaseLoader:
             try:
                 e = Event(self.dataset.games[anno['gameid']][
                           'events'][anno['eid']], gameid=anno['gameid'])
-                e.sequence_around_t(anno, self.dataset.tfr, from_beginning=True)  # EventException
+                e.sequence_around_t(anno, self.dataset.tfr)  # EventException
                 if extract:
                     # ExtractorException
                     ret_val.append(self.extractor.extract(e))
@@ -115,7 +115,7 @@ class BaseLoader:
                 break
             try:
                 e = Event(self.dataset.games[anno['gameid']]['events'][anno['eid']], anno=anno, gameid=anno['gameid'])
-                e.sequence_around_t(anno, self.dataset.tfr, from_beginning=True)  # EventException
+                e.sequence_around_t(anno, self.dataset.tfr)  # EventException
                 if extract:
                     # ExtractorException
                     ret_val.append(self.extractor.extract(e))
@@ -139,7 +139,7 @@ class BaseLoader:
                     try:
                         anno = self.dataset.propose_negative_Ta()
                         e = Event(self.dataset.games[anno['gameid']]['events'][anno['eid']], gameid=anno['gameid'], anno=anno)
-                        e.sequence_around_t(anno, self.dataset.tfr, from_beginning=True)
+                        e.sequence_around_t(anno, self.dataset.tfr)
                         if extract:
                             # ExtractorException
                             ret_val.append(self.extractor.extract(e))
@@ -184,7 +184,7 @@ class BaseLoader:
                 game_clock = e.moments[i].game_clock
                 quarter = e.moments[i].quarter
                 anno = self.dataset._make_annotation(game_id, quarter, game_clock, event_id, self.dataset.tfr)
-                e.sequence_around_t(anno, self.dataset.tfr, from_beginning=True)  # EventException
+                e.sequence_around_t(anno, self.dataset.tfr)  # EventException
                 # anno = {'gameclock': game_clock}
                 # e.sequence_around_t(anno, self.dataset.tfr, from_beginning=False)
 

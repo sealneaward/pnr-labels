@@ -20,7 +20,6 @@ import yaml
 from glob import glob
 
 
-
 if __name__ == '__main__':
 	arguments = docopt(__doc__)
 	print ("...Docopt... ")

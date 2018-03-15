@@ -12,6 +12,7 @@ data_config:
   t_jitter: 0
   t_negative: 2
   tfr: 50
+  frame_rate: 25
 extractor_config:
   crop: bmf
   crop_size: [25, 25]

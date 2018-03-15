@@ -113,7 +113,8 @@ class Event:
             break
         if last_idx != -1:
           self.moments = self.moments[:last_idx]
-    def sequence_around_t(self, anno, tfr, pnr=False, from_beginning=False):
+            
+    def sequence_around_t(self, anno, tfr, pnr=False):
         """
         segment [T_a - tfr, T_a + tfr]
         note: when seek_last = True, seek for the last T_a
