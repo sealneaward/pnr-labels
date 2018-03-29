@@ -1,14 +1,14 @@
-"""train.py
+"""train_classifier.py
 
 Usage:
-    train.py <fold_index> <f_data_config> <f_model_config>
+    train_classifier.py <fold_index> <f_data_config> <f_model_config>
 
 Arguments:
     <f_data_config>  example ''data/config/pnrs.yaml''
     <f_model_config> example 'model/config/conv2d-3layers.yaml'
 
 Example:
-    python train.py 0 pnrs.yaml conv2d-3layers-25x25.yaml
+    python train_classifier.py 0 pnrs.yaml conv2d-3layers-25x25.yaml
 Options:
     --negative_fraction_hard=<percent> [default: 0]
 """

@@ -1,0 +1,7 @@
+class_name: Seq2Seq
+### Model Configuration
+model_config:
+    hidden_dim: 512
+    input_length: 5
+    batch_size: 32
+    feature_size: 18

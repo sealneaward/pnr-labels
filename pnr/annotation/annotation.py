@@ -12,16 +12,29 @@ Example:
 import warnings
 warnings.filterwarnings('ignore')
 
-import pandas as pd
 import math
 import os
-import cPickle as pickle
+import cPickle as pkl
 from docopt import docopt
 import yaml
 from tqdm import tqdm
 
 import pnr.config as CONFIG
-from pnr.roles import *
+from pnr.annotation.roles import *
+from pnr.annotation.actions import *
+
+movement_headers = [
+    "team_id",
+    "player_id",
+    "x_loc",
+    "y_loc",
+    "radius",
+    "game_clock",
+    "shot_clock",
+    "quarter",
+    "game_id",
+    "event_id"
+]
 
 
 def gameclock_to_str(gameclock):
@@ -56,14 +69,17 @@ def read_annotation(fpath):
 
 
 def read_annotation_from_raw(fpath, game_id):
-    data = pickle.load(open(fpath, 'rb'))
+    data = pkl.load(open(fpath, 'rb'))
     annotations = {}
     data = pd.DataFrame(data)
+    data['gameid'] = '00' + data['gameid'].astype(int).astype(str)
     event_ids = data.loc[:,'eid'].drop_duplicates(inplace=False).values
+    data = data.loc[data.gameid == game_id, :]
 
     for event in event_ids:
-        eid_annotations = data.loc[data.eid == event, 'gameclock'].values
-        annotations[event] = eid_annotations
+        eid_annotations = data.loc[data.eid == event, :].to_dict(orient='records')
+        if len(eid_annotations) > 0:
+            annotations[int(event)] = eid_annotations
 
     return annotations
 
@@ -76,7 +92,7 @@ def prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir):
         if not os.path.isfile(os.path.join(pnr_dir,game_anno_base)):
             continue
         game_id = game_anno_base.split('.')[0].split('-')[1]
-        raw_data = pd.read_pickle(os.path.join(game_dir, game_id+'.pkl'))
+        raw_data = pd.read_pkl(os.path.join(game_dir, game_id+'.pkl'))
         fpath = os.path.join(pnr_dir, game_anno_base)
         anno = read_annotation(fpath)
         for k, v in anno.items():
@@ -92,9 +108,45 @@ def prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir):
 
 def script_anno_rev0():
     gt = prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir)
-    pickle.dump(gt, open(os.path.join(pnr_dir,'gt/rev0.pkl'),'wb'))
+    pkl.dump(gt, open(os.path.join(pnr_dir,'gt/rev0.pkl'),'wb'))
     annotations = pd.DataFrame(gt)
     annotations.to_csv(os.path.join(pnr_dir, 'gt/annotations.csv'), index=False)
+
+
+def get_annotation_movement():
+    """
+    Segment actions of players before and after the screen time as actions
+    Get the movement of individual actions for post processing for trajectory2vec
+    """
+    annotations = pd.read_csv(os.path.join(pnr_dir, 'roles/annotations.csv'))
+    game_ids = annotations.loc[:,'gameid'].drop_duplicates(inplace=False).values
+
+    missed_count = 0
+    trajectories = []
+    for game_id in tqdm(game_ids):
+        game = pd.read_pickle(os.path.join(game_dir, '00' + str(int(game_id)) + '.pkl'))
+        game_annotations = annotations.loc[annotations.gameid == game_id, :]
+        for ind, annotation in game_annotations.iterrows():
+            moments = []
+            movement_data = game['events'][int(annotation['eid'])]['moments']
+            for moment in movement_data:
+                for player in moment[5]:
+                    player.extend([moment[2], moment[3], moment[0], game_id, annotation['eid']])
+                    player = player[:len(movement_headers)]
+                    moments.append(player)
+
+            try:
+                movement_data = pd.DataFrame(data=moments, columns=movement_headers)
+                annotation_trajectories = get_actions(annotation, movement_data, data_config)
+                if annotation_trajectories is None:
+                    missed_count += 1
+                    continue
+                else:
+                    trajectories.append(annotation_trajectories)
+            except Exception as err:
+                continue
+    print('Missed Count: %s annotations' % (str(missed_count)))
+    pkl.dump(trajectories, open(os.path.join(pnr_dir, 'roles/trajectories.pkl'), 'wb'))
 
 
 def annotate_roles():
@@ -105,18 +157,6 @@ def annotate_roles():
     - screen-setter
     - screen-defender
     """
-    movement_headers = [
-        "team_id",
-        "player_id",
-        "x_loc",
-        "y_loc",
-        "radius",
-        "game_clock",
-        "shot_clock",
-        "quarter",
-        "game_id",
-        "event_id"
-    ]
     annotations_with_roles = pd.DataFrame()
 
     if not os.path.exists('%s/roles/' % pnr_dir):
@@ -126,7 +166,7 @@ def annotate_roles():
     annotations = pd.read_csv(os.path.join(pnr_dir, 'gt/annotations.csv'))
     game_ids = annotations.loc[:,'gameid'].drop_duplicates(inplace=False).values
     for game_id in tqdm(game_ids):
-        game = pd.read_pickle(os.path.join(game_dir, '00' + str(game_id) + '.pkl'))
+        game = pd.read_pkl(os.path.join(game_dir, '00' + str(game_id) + '.pkl'))
         game_annotations = annotations.loc[annotations.gameid == game_id, :]
         for ind, annotation in game_annotations.iterrows():
             moments = []
@@ -148,6 +188,8 @@ def annotate_roles():
                 continue
     print('Missed %s annotations' % str(missed_count))
     annotations_with_roles.to_csv(os.path.join(pnr_dir, 'roles/annotations.csv'), index=False)
+    gt = annotations_with_roles.to_dict(orient='records')
+    pkl.dump(gt, open(os.path.join(pnr_dir, 'roles/rev0.pkl'), 'wb'))
 
 def raw_to_gt_format():
     """
@@ -173,8 +215,9 @@ if __name__ == '__main__':
     f_data_config = '%s/%s' % (CONFIG.data.config.dir, arguments['<f_data_config>'])
     data_config = yaml.load(open(f_data_config, 'rb'))
 
-    from pnr.data.constant import data_dir, game_dir
+    from pnr.data.constant import game_dir
     pnr_dir = os.path.join(game_dir, 'pnr-annotations')
     # script_anno_rev0()
-    annotate_roles()
+    # annotate_roles()
+    get_annotation_movement()
     # raw_to_gt_format()

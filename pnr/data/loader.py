@@ -10,6 +10,8 @@ from pnr.vis.Team import TeamNotFoundException
 from pnr.data.extractor import ExtractorException, OneHotException
 from pnr.data.utils import shuffle_2_array, make_3teams_11players
 from pnr.data.constant import data_dir, game_dir
+import pnr.config as CONFIG
+from pnr.data.constant import game_dir
 
 
 class BaseLoader:
@@ -344,8 +346,7 @@ class GameSequenceLoader:
         if (self.negative_fraction_hard > 0 and
                 self.hard_neg_ind + self.N_hard_neg >= self.hard_neg_x.shape[0]):
             self.hard_neg_ind = 0
-            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(
-                self.hard_neg_x, self.hard_neg_t)
+            self.hard_neg_x, self.hard_neg_t = shuffle_2_array(self.hard_neg_x, self.hard_neg_t)
 
         s = list(self.pos_x.shape)
         s[0] = self.batch_size
@@ -410,6 +411,73 @@ class GameSequenceLoader:
             x = self.extractor.extract_batch(x, input_is_sequence=True)
 
         return x, t
+
+    def reset(self):
+        self.batch_index = 0
+
+
+class TrajectoryLoader:
+    def __init__(self, config, fold_index):
+        """
+        """
+        pnr_dir = os.path.join(game_dir, 'pnr-annotations')
+
+        self.config = config
+        self.batch_size = self.config['batch_size']
+        self.batch_index = 0
+        self.annotations = np.load('%s/roles/behaviours.npy' % (pnr_dir))
+        self.fold_index = fold_index
+
+        self.x = []
+
+        for trajectory in self.annotations:
+            self.x.append(trajectory)
+
+        self.x = np.array(self.x)
+        self.ind = 0
+        self.val_ind = 0
+        self.N = self.batch_size
+
+        train_inds, val_inds = self._split(list(range(len(self.x))))
+        self.val_x = self.x[val_inds]
+        self.x = self.x[train_inds]
+
+    def _split(self, inds, fold_index=0):
+        if self.config['data_config']['shuffle']:
+            np.random.seed(self.config['randseed'])
+            np.random.shuffle(inds)
+        N = len(inds)
+        val_start = np.round(fold_index / self.config['data_config']['N_folds'] * N).astype('int32')
+        val_end = np.round((fold_index + 1) / self.config['data_config']['N_folds'] * N).astype('int32')
+        val_inds = inds[val_start:val_end]
+        train_inds = inds[:val_start] + inds[val_end:]
+        return train_inds, val_inds
+
+    def next(self):
+        return self.next_batch()
+
+    def next_batch(self):
+        if self.ind + self.N >= self.x.shape[0]:
+            self.ind = 0
+            np.random.shuffle(self.x)
+
+        try:
+            s = list(self.x.shape)
+        except Exception as err:
+            print(None)
+        s[0] = self.batch_size
+        x = np.zeros(s)
+        x[:self.N] = self.x[self.ind:self.ind + self.N]
+        self.ind += self.N
+        return x
+
+    def load_valid(self):
+        if self.val_ind + self.batch_size > len(self.val_x):
+            self.val_ind = 0
+            return None
+        x = self.val_x[self.val_ind:self.val_ind + self.batch_size]
+        self.val_ind += self.batch_size
+        return x
 
     def reset(self):
         self.batch_index = 0

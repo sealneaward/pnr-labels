@@ -4,9 +4,9 @@ from Moment import Moment, MomentException, PNRException
 from Team import TeamNotFoundException
 
 plt = None
-from pnr import data
-from pnr.annotation import gameclock_to_str
 import numpy as np
+import pandas as pd
+import pnr.config as CONFIG
 
 class EventException(Exception):
     pass
@@ -27,37 +27,29 @@ def format_pbp(pbp):
 def format_anno(anno):
     event_str = "PnR Annotation \n"
     event_str += '------------Event: %i ---------------\n' % anno['eid']
-    event_str += 'Start Time: %s, Screen Time: %s, End Time: %s' % (
-        gameclock_to_str(anno['start_time']),
-        gameclock_to_str(anno['gameclock']),
-        gameclock_to_str(anno['end_time'])
-    )
     return event_str
 
 class Event:
     """A class for handling and showing events"""
 
-    def __init__(self, event, anno, gameid=''):
-        self.gameid = gameid
+    def __init__(self, event, anno):
+        self.gameid = anno['gameid']
         self.home_team_id = event['home']['teamid']
-        self.home_players = event['home']['players']
-        self.guest_players = event['visitor']['players']
-        self.players = self.home_players + self.guest_players
-
-        player_ids = [player['playerid'] for player in self.players]
-        player_names = ['%s %s' % (player['firstname'], player['lastname']) for player in self.players]
-        player_jerseys = [player['jersey'] for player in self.players]
-        values = list(zip(player_names, player_jerseys))
-        moments = event['moments']
-
-        self.player_ids_dict = dict(zip(player_ids, values))
+        self.away_team_id = event['visitor']['teamid']
+        self.moments = []
         self.pbp = event['playbyplay']
         self.anno = anno
+        self.start_time = 0
+        self.end_time = 999
 
-        self.moments = []
-        for ind, moment in enumerate(moments):
+        for ind, moment in enumerate(event['moments']):
             try:
-                self.moments.append(Moment(moment, anno=self.anno))
+                moment = Moment(moment, anno=self.anno)
+                self.moments.append(moment)
+                if moment.game_clock < self.end_time:
+                    self.end_time = moment.game_clock
+                if moment.game_clock > self.start_time:
+                    self.start_time = moment.game_clock
             except MomentException:
                 continue
             except PNRException:
@@ -65,6 +57,21 @@ class Event:
             except TeamNotFoundException:
                 raise TeamNotFoundException
 
+        start_moment = self.moments[0]
+        start_moment_ids = [player.id for player in start_moment.players]
+        home_players = pd.DataFrame(event['home']['players'])
+        guest_players = pd.DataFrame(event['visitor']['players'])
+
+        self.home_players = home_players.loc[home_players.playerid.isin(start_moment_ids), :].T.to_dict().values()
+        self.guest_players = guest_players.loc[home_players.playerid.isin(start_moment_ids), :].T.to_dict().values()
+        self.players = self.home_players + self.guest_players
+
+        player_ids = [player['playerid'] for player in self.players]
+        player_names = ['%s %s' % (player['firstname'], player['lastname']) for player in self.players]
+        player_jerseys = [player['jersey'] for player in self.players]
+        values = list(zip(player_names, player_jerseys))
+
+        self.player_ids_dict = dict(zip(player_ids, values))
         self._resolve_home_basket()
 
     def _resolve_home_basket(self):
@@ -139,63 +146,6 @@ class Event:
           raise EventException('incorrect length')
         self.moments = self.moments[start_ind:end_ind]
 
-        # if event is pnr, reduce moment data to 4 players identified in pnr annotation
-        if pnr and not self.one_hot:
-            for ind, moment in enumerate(self.moments):
-                players = self.moments[ind].players
-                self.moments[ind].players = [None] * 4
-                for player in players:
-                    if player.id == anno['ball_player_id']:
-                        self.moments[ind].players[0] = player
-                    elif player.id == anno['screen_player_id']:
-                        self.moments[ind].players[1] = player
-                    elif player.id == anno['ball_def_player_id']:
-                        self.moments[ind].players[2] = player
-                    elif player.id == anno['screen_def_player_id']:
-                        self.moments[ind].players[3] = player
-
-                if not(
-                        self.moments[ind].players[0] is not None and
-                        self.moments[ind].players[1] is not None and
-                        self.moments[ind].players[2] is not None and
-                        self.moments[ind].players[3] is not None
-                ):
-                    raise EventException
-
-        if pnr and self.one_hot:
-            for ind, moment in enumerate(self.moments):
-                players = self.moments[ind].players
-                self.moments[ind].players = [None] * 4
-                self.moments[ind].one_hot_players = [None] * 4
-                for player in players:
-                    if player.id == anno['ball_player_id']:
-                        self.moments[ind].players[0] = player
-                        self.moments[ind].one_hot_players[0] = player.one_hot_vector
-                    elif player.id == anno['screen_player_id']:
-                        self.moments[ind].players[1] = player
-                        self.moments[ind].one_hot_players[1] = player.one_hot_vector
-                    elif player.id == anno['ball_def_player_id']:
-                        self.moments[ind].players[2] = player
-                        self.moments[ind].one_hot_players[2] = player.one_hot_vector
-                    elif player.id == anno['screen_def_player_id']:
-                        self.moments[ind].players[3] = player
-                        self.moments[ind].one_hot_players[3] = player.one_hot_vector
-
-                if not(
-                        self.moments[ind].players[0] is not None and
-                        self.moments[ind].players[1] is not None and
-                        self.moments[ind].players[2] is not None and
-                        self.moments[ind].players[3] is not None
-                ) or not(
-                        self.moments[ind].one_hot_players[0] is not None and
-                        self.moments[ind].one_hot_players[1] is not None and
-                        self.moments[ind].one_hot_players[2] is not None and
-                        self.moments[ind].one_hot_players[3] is not None
-                ):
-                    raise OneHotException
-
-
-
     def update_radius(self, i, player_circles, ball_circle, annotations, clock_info, lines, pred_lines):
         line = lines[0]
         ret = [player_circles, ball_circle, line]
@@ -257,19 +207,11 @@ class Event:
 
         return ret
 
-    def show(self, save_path='', futures=None):
-        # global plt
-        #
-        # if plt is None:
+    def show(self, save_path='', anno=None):
         import matplotlib.pyplot as plt
         from matplotlib import animation
-        from matplotlib.patches import Circle, Rectangle, Arc
-        import cPickle as pkl
         # Leave some space for inbound passes
-        ax = plt.axes(xlim=(Constant.X_MIN,
-                            Constant.X_MAX),
-                      ylim=(Constant.Y_MIN,
-                            Constant.Y_MAX))
+        ax = plt.axes(xlim=(Constant.X_MIN,Constant.X_MAX), ylim=(Constant.Y_MIN,Constant.Y_MAX))
         ax.axis('off')
         fig = plt.gcf()
         ax.grid(False)  # Remove grid
@@ -280,22 +222,26 @@ class Event:
 
         player_dict = self.player_ids_dict
 
-        clock_info = ax.annotate('', xy=[Constant.X_CENTER, Constant.Y_CENTER],
-                                 color='black', horizontalalignment='center',
-                                   verticalalignment='center')
+        clock_info = ax.annotate(
+            '',
+            xy=[Constant.X_CENTER, Constant.Y_CENTER],
+            color='black',
+            horizontalalignment='center',
+            verticalalignment='center'
+        )
 
-        annotations = [ax.annotate(self.player_ids_dict[player['playerid']][1], xy=[0, 0], color='w',
-                                   horizontalalignment='center',
-                                   verticalalignment='center', fontweight='bold')
-                       for player in self.players]
+        annotations = [
+            ax.annotate(
+                self.player_ids_dict[player['playerid']][1],
+                xy=[0, 0],
+                color='w',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontweight='bold'
+            )
+            for player in self.players
+        ]
         x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
-        if futures is not None:
-            self.futures = futures
-            pred_lines = []
-            for _ in range(self.futures[2].shape[1]):
-              l, = ax.plot([],[], color='k', alpha=1./self.futures[2].shape[1])
-              pred_lines.append(l)
-            line, = ax.plot([], [], color='w')
 
         # Prepare table
         sorted_players = sorted(start_moment.players, key=lambda player: player.team.id)
@@ -311,47 +257,55 @@ class Event:
         players_data = list(zip(home_players, guest_players))
 
         try:
-          table = plt.table(cellText=players_data,
-                              colLabels=column_labels,
-                              colColours=column_colours,
-                              colWidths=[Constant.COL_WIDTH, Constant.COL_WIDTH],
-                              loc='bottom',
-                              cellColours=cell_colours,
-                              fontsize=Constant.FONTSIZE,
-                              cellLoc='center')
+          table = plt.table(
+              cellText=players_data,
+              colLabels=column_labels,
+              colColours=column_colours,
+              colWidths=[Constant.COL_WIDTH, Constant.COL_WIDTH],
+              loc='bottom',
+              cellColours=cell_colours,
+              fontsize=Constant.FONTSIZE,
+              cellLoc='center'
+          )
         except ValueError as e:
           raise EventException() ### unknown error, probably malformed sequence
         else:
           pass
         finally:
           pass
+
         table.scale(1, Constant.SCALE)
         table_cells = table.properties()['child_artists']
         for cell in table_cells:
             cell._text.set_color('white')
 
-        player_circles = [plt.Circle((0, 0), Constant.PLAYER_CIRCLE_SIZE, color=player.color)
-                          for player in start_moment.players]
-        ball_circle = plt.Circle((0, 0), Constant.PLAYER_CIRCLE_SIZE,
-                                 color=start_moment.ball.color)
+        player_circles = [
+            plt.Circle((0, 0), Constant.PLAYER_CIRCLE_SIZE, color=player.color)
+            for player in start_moment.players
+        ]
+        ball_circle = plt.Circle((0, 0), Constant.PLAYER_CIRCLE_SIZE, color=start_moment.ball.color)
         for circle in player_circles:
             ax.add_patch(circle)
         ax.add_patch(ball_circle)
 
-        if futures is not None:
-            anim = animation.FuncAnimation(
-                             fig, self.update_radius,
-                             fargs=(player_circles, ball_circle, annotations, clock_info, [line], pred_lines),
-                             frames=len(self.moments), interval=Constant.INTERVAL)
-        else:
-            anim = animation.FuncAnimation(
-                fig, self.update_movement,
-                fargs=(player_circles, ball_circle, annotations, clock_info),
-                frames=len(self.moments), interval=Constant.INTERVAL)
+        anim = animation.FuncAnimation(
+            fig,
+            self.update_movement,
+            fargs=(player_circles, ball_circle, annotations, clock_info),
+            frames=len(self.moments),
+            interval=Constant.INTERVAL
+        )
 
-        court = plt.imread(data.constant.court_path)
-        plt.imshow(court, zorder=0, extent=[Constant.X_MIN, Constant.X_MAX - Constant.DIFF,
-                                            Constant.Y_MAX, Constant.Y_MIN])
+        court = plt.imread('%s/court.png' % (CONFIG.vis.dir))
+        plt.imshow(
+            court,
+            zorder=0,
+            extent=[
+                Constant.X_MIN,
+                Constant.X_MAX - Constant.DIFF,
+                Constant.Y_MAX, Constant.Y_MIN
+            ]
+        )
 
         plt.title(format_anno(self.anno))
         if save_path == '':

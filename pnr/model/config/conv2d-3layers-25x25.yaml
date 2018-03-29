@@ -1,5 +1,5 @@
 class_name: ConvNet2d
-### Dataset Configuration
+### Model Configuration
 model_config:
     d1: 25
     d2: 25

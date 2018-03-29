@@ -6,7 +6,7 @@ else:
 
 sportvu_dir = data_dir + '/data/sportvu'
 game_dir = sportvu_dir + '/data'
-court_path = data_dir + 'court.png'
+court_path = data_dir + '/court.png'
 
 color_dict = {
     1610612737: ('#E13A3E', 'ATL'),

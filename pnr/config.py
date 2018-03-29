@@ -6,6 +6,12 @@ REAL_PATH = data_dir
 data = ConfigSection("data")
 data.dir = "%s/%s" % (REAL_PATH, "data")
 
+vis = ConfigSection("vis")
+vis.dir = "%s/%s" % (REAL_PATH, "vis")
+
+annotation = ConfigSection("annotation")
+annotation.dir = "%s/%s" % (REAL_PATH, "annotation")
+
 data.config = ConfigSection("config")
 data.config.dir = "%s/%s" % (data.dir, "config")
 
