@@ -14,7 +14,6 @@ def extract_trajectories(annotation_movements, frame_rate=25.0):
     for annotation in annotation_movements:
         for player in annotation['players']:
             # create new increasing times for game_clock
-            time_range = np.arange(0.0, 2.0, 0.04)
             player['movement']['before']['game_clock'] = np.arange(0.0, 2.0, 0.04)
             player['movement']['after']['game_clock'] = np.arange(0.0, 2.0, 0.04)
 

@@ -436,11 +436,12 @@ class TrajectoryLoader:
         self.x = np.array(self.x)
         self.ind = 0
         self.val_ind = 0
+        self.set_ind = 0
         self.N = self.batch_size
 
         train_inds, val_inds = self._split(list(range(len(self.x))))
         self.val_x = self.x[val_inds]
-        self.x = self.x[train_inds]
+        self.train_x = self.x[train_inds]
 
     def _split(self, inds, fold_index=0):
         if self.config['data_config']['shuffle']:
@@ -457,17 +458,17 @@ class TrajectoryLoader:
         return self.next_batch()
 
     def next_batch(self):
-        if self.ind + self.N >= self.x.shape[0]:
+        if self.ind + self.N >= self.train_x.shape[0]:
             self.ind = 0
-            np.random.shuffle(self.x)
+            np.random.shuffle(self.train_x)
 
         try:
-            s = list(self.x.shape)
+            s = list(self.train_x.shape)
         except Exception as err:
             print(None)
         s[0] = self.batch_size
         x = np.zeros(s)
-        x[:self.N] = self.x[self.ind:self.ind + self.N]
+        x[:self.N] = self.train_x[self.ind:self.ind + self.N]
         self.ind += self.N
         return x
 
@@ -477,6 +478,14 @@ class TrajectoryLoader:
             return None
         x = self.val_x[self.val_ind:self.val_ind + self.batch_size]
         self.val_ind += self.batch_size
+        return x
+
+    def load_set(self):
+        if self.set_ind + self.batch_size > len(self.x):
+            self.set_ind = 0
+            return None
+        x = self.x[self.set_ind:self.set_ind + self.batch_size]
+        self.set_ind += self.batch_size
         return x
 
     def reset(self):

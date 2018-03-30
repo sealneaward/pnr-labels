@@ -31,11 +31,11 @@ class Seq2Seq:
 
         # basic LSTM seq2seq model
         cell = tf.nn.rnn_cell.BasicLSTMCell(self.hidden_dim, state_is_tuple=True)
-        _, enc_state = tf.contrib.rnn.static_rnn(cell, encoder_inputs, dtype=tf.float32)
+        self.embedding, self.enc_state = tf.contrib.rnn.static_rnn(cell, encoder_inputs, dtype=tf.float32)
         cell = tf.contrib.rnn.OutputProjectionWrapper(cell, self.feature_size)
-        dec_outputs, dec_state = tf.contrib.legacy_seq2seq.rnn_decoder(
+        dec_outputs, self.dec_state = tf.contrib.legacy_seq2seq.rnn_decoder(
             decoder_inputs,
-            enc_state,
+            self.enc_state,
             cell,
             loop_function=self.loopf
         )
