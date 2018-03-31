@@ -84,7 +84,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             loader.reset()
             continue
 
-        if iter_ind % 10000 == 0 and iter_ind > 0:
+        if iter_ind % 25000 == 0 and iter_ind > 0:
             lrv *= .1
 
         feed_dict = net.input(batch_xs)
@@ -119,25 +119,6 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
                 best_saver.save(sess, p)
                 tf.train.export_meta_graph('%s.meta' % (p))
                 best_val_loss = val_loss
-                embeddings = []
-
-                while True:
-                    # save embedding
-                    loaded = loader.load_set()
-                    if loaded is not None:
-                        x = loaded
-                        feed_dict = net.input(x)
-                        embedding = sess.run([net.embedding], feed_dict=feed_dict)
-                        embedding = np.array(embedding)
-                        embedding = np.squeeze(embedding)
-                        # get last embedded state
-                        # TODO check if having 5 embedded states has a difference on embedding process
-                        # traj2vec only has 1 embedded state, I have 5  TODO check window logic
-                        embeddings.extend(embedding[:, -1, :])
-                    else:  ## done
-                        embeddings = np.array(embeddings)
-                        np.save('%s/%s' % (CONFIG.saves.dir, 'embeddings'), embeddings)
-                        break
 
         if best_not_updated == best_acc_delay:
             break
@@ -159,6 +140,6 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 30000
-    best_acc_delay = 10000
+    max_iter = 100000
+    best_acc_delay = 25000
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay)

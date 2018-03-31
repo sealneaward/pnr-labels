@@ -4,12 +4,33 @@ import pandas as pd
 import numpy as np
 import os
 from tqdm import tqdm
+from sklearn import preprocessing
+from copy import copy
 
 np.seterr(divide='raise', invalid='raise')
 
 
-def extract_trajectories(annotation_movements, frame_rate=25.0):
+def convert_movement(movement):
+    movement.loc[movement.x_loc > 47, 'y_loc'] = movement.loc[movement.x_loc > 47, 'y_loc'].apply(lambda y: 50 - y)
+    movement.loc[movement.x_loc > 47, 'x_loc'] = movement.loc[movement.x_loc > 47, 'x_loc'].apply(lambda x: 94 - x)
+    # movement['x_loc'] = movement['y_loc'].apply(lambda y: 250 * (1 - (y - 0) / (50 - 0)) + -250 * ((y - 0) / (50 - 0)))
+    # movement['y_loc'] = movement['x_loc'].apply(lambda x: -47.5 * (1 - (x - 0) / (47 - 0)) + 422.5 * ((x - 0) / (47 - 0)))
+
+    return movement
+
+
+def convert_to_half(annotation_movements):
+    for anno_ind, annotation in enumerate(annotation_movements):
+        for player_ind, player in enumerate(annotation['players']):
+            player['movement']['before'] = convert_movement(player['movement']['before'])
+            player['movement']['after'] = convert_movement(player['movement']['after'])
+            annotation_movements[anno_ind]['players'][player_ind] = player
+    return annotation_movements
+
+
+def extract_trajectories(annotation_movements):
     trajectories = []
+    annotations = []
 
     for annotation in annotation_movements:
         for player in annotation['players']:
@@ -20,15 +41,29 @@ def extract_trajectories(annotation_movements, frame_rate=25.0):
             before_trajectory = player['movement']['before'][['game_clock', 'x_loc', 'y_loc']].values
             after_trajectory = player['movement']['after'][['game_clock', 'x_loc', 'y_loc']].values
 
+            # append trajectory and annotation
             trajectories.append(before_trajectory)
             trajectories.append(after_trajectory)
 
-    return trajectories
+            # append annotations for before and after for player
+            annotation['annotation']['player_id'] = player['player_id']
+            annotation['annotation']['action'] = 'before'
+            before_annotation = copy(annotation['annotation'])
+            annotations.append(before_annotation)
+            annotation['annotation']['action'] = 'after'
+            after_annotation = copy(annotation['annotation'])
+            annotations.append(after_annotation)
 
 
-def complete_trajectories(trajectories):
+    return trajectories, annotations
+
+
+def complete_trajectories(trajectories, annotations):
     completed_trajectories = []
-    for trajectory in tqdm(trajectories):
+    completed_annotations = []
+
+    for ind, trajectory in enumerate(trajectories):
+        annotation = annotations[ind]
         completed_trajectory = []
         for i in range(0, len(trajectory)):
             rec = []
@@ -47,20 +82,45 @@ def complete_trajectories(trajectories):
                     rec.append(0)
             completed_trajectory.append(rec)
         completed_trajectories.append(completed_trajectory)
-        
-    return completed_trajectories
+        completed_annotations.append(annotation)
+
+    return completed_trajectories, completed_annotations
 
 
 def generate_behavior_sequences(features_trajectories):
     behavior_sequences = []
 
     for trajectory_features in tqdm(features_trajectories):
+        # shape = 50, 4
         windows = rolling_window(trajectory_features)
+        # shape = 5, 10, 4
         behavior_sequence = behavior_extract(windows)
+        # shape = 5, 18
         behavior_sequences.append(behavior_sequence)
 
     return behavior_sequences
 
+
+def generate_normal_behavior_sequence(behavior_sequences):
+    behavior_sequences_normal = []
+    templist = []
+    for item in behavior_sequences:
+        for ii in item:
+            templist.append(ii)
+        print len(item)
+    print len(templist)
+    min_max_scaler = preprocessing.MinMaxScaler()
+    # print np.shape(behavior_sequence)
+    templist_normal = min_max_scaler.fit_transform(templist).tolist()
+    index = 0
+    for item in behavior_sequences:
+        behavior_sequence_normal = []
+        for ii in item:
+            behavior_sequence_normal.append(templist_normal[index])
+            index = index + 1
+        behavior_sequences_normal.append(behavior_sequence_normal)
+
+    return behavior_sequences_normal
 
 def compute_features(completed_trajectories):
     features_trajectories = []
@@ -86,7 +146,7 @@ def compute_features(completed_trajectories):
 
 
 def rolling_window(sample, window_size=10, offset=5):
-    # TODO change window length and offset tomorrow(Tuesday)
+    # TODO change window length and offset
     time_length = len(sample) # should be around 50
     window_length = int(time_length / window_size)
     windows = []
@@ -143,12 +203,14 @@ def get_behaviours(action_movements):
         behaviour vectors for each action identified
     """
     # TODO cleanup
-    trajectories = extract_trajectories(action_movements)
-    trajectories = complete_trajectories(trajectories)
+    # action_movements = convert_to_half(action_movements)
+    trajectories, annotations = extract_trajectories(action_movements)
+    trajectories, annotations = complete_trajectories(trajectories, annotations)
     features = compute_features(trajectories)
     behaviours = generate_behavior_sequences(features)
+    # behaviours = generate_normal_behavior_sequence(behaviours)
 
-    return np.array(behaviours)
+    return np.array(behaviours), annotations
 
 
 if __name__ == '__main__':
@@ -156,6 +218,8 @@ if __name__ == '__main__':
 
     pnr_dir = os.path.join(game_dir, 'pnr-annotations')
     action_movements = pkl.load(open(os.path.join(pnr_dir, 'roles/trajectories.pkl'), 'rb'))
-    behaviours = get_behaviours(action_movements)
+    behaviours, annotations = get_behaviours(action_movements)
+
     np.save('%s/roles/behaviours' % (pnr_dir), behaviours)
+    pkl.dump(annotations, open(os.path.join(pnr_dir, 'roles/annotations.pkl'), 'wb'))
 

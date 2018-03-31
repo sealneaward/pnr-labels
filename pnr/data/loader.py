@@ -3,6 +3,7 @@ import cPickle as pickle
 import yaml
 import os
 import numpy as np
+import pandas as pd
 import cPickle as pkl
 
 from pnr.vis.Event import Event, EventException
@@ -425,13 +426,12 @@ class TrajectoryLoader:
         self.config = config
         self.batch_size = self.config['batch_size']
         self.batch_index = 0
-        self.annotations = np.load('%s/roles/behaviours.npy' % (pnr_dir))
         self.fold_index = fold_index
-
         self.x = []
+        self.annotations = []
 
-        for trajectory in self.annotations:
-            self.x.append(trajectory)
+        self.annotations = pd.read_pickle('%s/roles/annotations.pkl' % (pnr_dir))
+        self.x = np.load(open('%s/roles/behaviours.npy' % (pnr_dir), 'rb'))
 
         self.x = np.array(self.x)
         self.ind = 0
@@ -485,8 +485,9 @@ class TrajectoryLoader:
             self.set_ind = 0
             return None
         x = self.x[self.set_ind:self.set_ind + self.batch_size]
+        annotations = self.annotations[self.set_ind:self.set_ind + self.batch_size]
         self.set_ind += self.batch_size
-        return x
+        return x, annotations
 
     def reset(self):
         self.batch_index = 0
