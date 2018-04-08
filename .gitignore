@@ -10,5 +10,5 @@ pnr.egg-info/**
 **/pnr/data/sportvu/**
 **/venv/**
 **/logs/**
-**/saves/**
+**/saves*/**
 *.py~

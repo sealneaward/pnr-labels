@@ -439,9 +439,10 @@ class TrajectoryLoader:
         self.set_ind = 0
         self.N = self.batch_size
 
-        train_inds, val_inds = self._split(list(range(len(self.x))))
-        self.val_x = self.x[val_inds]
-        self.train_x = self.x[train_inds]
+        # train_inds, val_inds = self._split(list(range(len(self.x))))
+        # self.val_x = self.x[val_inds]
+        # self.train_x = self.x[train_inds]
+        self.train_x = self.x
 
     def _split(self, inds, fold_index=0):
         if self.config['data_config']['shuffle']:

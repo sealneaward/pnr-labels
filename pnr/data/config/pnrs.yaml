@@ -1,4 +1,4 @@
-batch_size: 32
+batch_size: 128
 cookies: {SR_user: '', auth_checked: 'true', is_live: 'true', srcssfull: 'yes'}
 data_config:
   N_folds: 5

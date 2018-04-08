@@ -33,7 +33,6 @@ import os
 
 def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay):
     loader = TrajectoryLoader(config=data_config, fold_index=fold_index)
-    val_x = loader.load_valid()
 
     net = eval(model_config['class_name'])(model_config['model_config'])
     net.build()
@@ -66,7 +65,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     merged = tf.summary.merge_all()
 
     train_step = tf.train.RMSPropOptimizer(learning_rate).minimize(loss)
-    best_val_loss = np.inf
+    best_eval_loss = np.inf
 
     tf.global_variables_initializer().run()
 
@@ -84,7 +83,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             loader.reset()
             continue
 
-        if iter_ind % 25000 == 0 and iter_ind > 0:
+        if iter_ind % 250000 == 0 and iter_ind > 0:
             lrv *= .1
 
         feed_dict = net.input(batch_xs)
@@ -92,33 +91,34 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict)
         train_writer.add_summary(summary, iter_ind)
 
-        if iter_ind % 100 == 0:
+        if iter_ind % 1000 == 0:
             feed_dict = net.input(batch_xs)
             train_loss = loss.eval(feed_dict=feed_dict)
 
-            val_tf_loss = []
+            tf_eval_loss = []
             while True:
-                loaded = loader.load_valid()
+                loaded = loader.load_set()
                 if loaded is not None:
-                    val_x = loaded
-                    feed_dict = net.input(val_x)
-                    val_loss = sess.run([loss], feed_dict=feed_dict)
-                    val_tf_loss.append(val_loss)
+                    eval_x, _ = loaded
+                    feed_dict = net.input(eval_x)
+                    eval_loss = sess.run([loss], feed_dict=feed_dict)
+                    tf_eval_loss.append(eval_loss)
                 else:  ## done
-                    val_loss = sess.run([loss], feed_dict=feed_dict)
-                    val_tf_loss.append(val_loss)
-                    val_loss = np.mean(val_tf_loss)
+                    eval_loss = sess.run([loss], feed_dict=feed_dict)
+                    tf_eval_loss.append(eval_loss)
+                    eval_loss = np.mean(tf_eval_loss)
                     break
 
-            print("Step %d, Training Loss %g, Validation Loss %g" % (iter_ind, train_loss, val_loss))
+            print("Step %d, Training Loss %g, Evaluation Loss %g" % (iter_ind, train_loss, eval_loss))
 
-            if val_loss < best_val_loss:
+            if eval_loss < best_eval_loss:
                 best_not_updated = 0
                 p = '%s/%s.ckpt.best' % (CONFIG.saves.dir, exp_name)
                 print ('Saving Best Model to: %s' % p)
                 best_saver.save(sess, p)
                 tf.train.export_meta_graph('%s.meta' % (p))
-                best_val_loss = val_loss
+                best_eval_loss = eval_loss
+
 
         if best_not_updated == best_acc_delay:
             break
@@ -140,6 +140,6 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 100000
-    best_acc_delay = 25000
+    max_iter = 500000
+    best_acc_delay = 50000
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay)

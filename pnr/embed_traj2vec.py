@@ -17,6 +17,7 @@ from __future__ import print_function
 
 # model
 import tensorflow as tf
+from tensorflow.contrib.tensorboard.plugins import projector
 optimize_loss = tf.contrib.layers.optimize_loss
 
 from pnr.model.seq2seq import Seq2Seq
@@ -29,11 +30,14 @@ import yaml
 import numpy as np
 import os
 import cPickle as pkl
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.manifold import TSNE
 
 def embed(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay):
     # hard code batch_size to 1 for writing embeddings
-    # data_config['batch_size'] = 1
-    # model_config['model_config']['batch_size'] = 1
+    data_config['batch_size'] = 1
+    model_config['model_config']['batch_size'] = 1
 
     loader = TrajectoryLoader(config=data_config, fold_index=fold_index)
     net = eval(model_config['class_name'])(model_config['model_config'])
@@ -46,45 +50,79 @@ def embed(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
     ckpt_path = '%s/%s.ckpt.best' % (CONFIG.saves.dir, exp_name)
     saver.restore(sess, ckpt_path)
 
-    # get last val loss figure
-    val_tf_loss = []
-    while True:
-        loaded = loader.load_valid()
-        if loaded is not None:
-            val_x = loaded
-            feed_dict = net.input(val_x)
-            val_loss = sess.run([loss], feed_dict=feed_dict)
-            val_tf_loss.append(val_loss)
-        else:  ## done
-            val_loss = sess.run([loss], feed_dict=feed_dict)
-            val_tf_loss.append(val_loss)
-            val_loss = np.mean(val_tf_loss)
-            break
-
-    print("Best Validation Loss %g" % (val_loss))
-
     embeddings = []
     embeddings_annotations = []
 
-    # while True:
-    #     # save embedding
-    #     loaded = loader.load_set()
-    #     if loaded is not None:
-    #         x, annotations = loaded
-    #         feed_dict = net.input(x)
-    #         embedding = sess.run([net.enc_state], feed_dict=feed_dict)
-    #         embedding = np.array(embedding)
-    #         # embedding = np.squeeze(embedding)
-    #         # get last embedded state
-    #         # TODO check if having 5 embedded states has a difference on embedding process
-    #         # traj2vec only has 1 embedded state, I have 5  TODO check window logic
-    #         embeddings.append(embedding[0, 0, -1])
-    #         embeddings_annotations.append(annotations[0])
-    #     else:  ## done
-    #         embeddings = np.array(embeddings)
-    #         np.save(os.path.join(pnr_dir, 'roles/embeddings'), embeddings)
-    #         pkl.dump(annotations, open(os.path.join(pnr_dir, 'roles/embeddings_annotations.pkl'), 'wb'))
-    #         break
+    while True:
+        # save embedding
+        loaded = loader.load_set()
+        if loaded is not None:
+            x, annotations = loaded
+            feed_dict = net.input(x)
+            embedding = sess.run([net.enc_state], feed_dict=feed_dict)
+            embedding = np.array(embedding)
+            embedding = np.squeeze(embedding)
+            embedding = embedding[0]
+            # get last embedded state
+            # TODO check if having 5 embedded states has a difference on embedding process
+            # traj2vec only has 1 embedded state, I have 5  TODO check
+            embeddings.append(embedding)
+            embeddings_annotations.append(annotations[0])
+        else:  ## done
+            embeddings = np.array(embeddings)
+            np.save(os.path.join(pnr_dir, 'roles/embeddings'), embeddings)
+            embeddings = pd.DataFrame(data=embeddings, columns=['%s' % col for col in range(embeddings.shape[-1])])
+            embeddings.to_csv('%s/%s' % (os.path.join(pnr_dir, 'roles'), 'embeddings.csv'), index=False, sep='\t')
+            pkl.dump(annotations, open(os.path.join(pnr_dir, 'roles/embeddings_annotations.pkl'), 'wb'))
+            break
+
+    return embeddings
+
+def tsne(embeddings):
+    """
+    Create t-SNE visualizations of player movement
+     in annotations based on embeddings in traj2vec
+
+    Parameters
+    ----------
+    embeddings: np.array
+        embedded information from seq2seq learning
+
+    Returns
+    -------
+    """
+    tsne = TSNE(n_components=2, init='pca', random_state=0)
+    vis_data = tsne.fit_transform(embeddings)
+    vis_x = vis_data[:, 0]
+    vis_y = vis_data[:, 1]
+
+
+    plt.figure()
+    plt.scatter(vis_x, vis_y)
+    plt.show()
+    plt.close()
+
+
+def project_tf(embeddings):
+    tf.reset_default_graph()
+    sess = tf.InteractiveSession()
+
+    embedding_var = tf.Variable(tf.stack(embeddings, axis=0), trainable=False, name='embedding')
+    sess.run(embedding_var.initializer)
+    writer = tf.summary.FileWriter('%s/%s' % (CONFIG.logs.dir, 'projector'), sess.graph)
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = embedding_var.name
+
+    # # Comment out if you don't have metadata
+    # embedding.metadata_path = os.path.join(CONFIG.logs.dir, 'metadata.tsv')
+    #
+    # # Comment out if you don't want sprites
+    # embedding.sprite.image_path = os.path.join(CONFIG.logs.dir, 'sprite.png')
+
+    projector.visualize_embeddings(writer, config)
+    saver = tf.train.Saver()
+    saver.save(sess, os.path.join(CONFIG.logs.dir, 'embed.ckpt'), 1)
 
 
 if __name__ == '__main__':
@@ -108,4 +146,6 @@ if __name__ == '__main__':
     init_lr = 1e-3
     max_iter = 30000
     best_acc_delay = 10000
-    embed(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay)
+    embeddings = embed(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay)
+    # tsne(embeddings)
+    project_tf(embeddings)

@@ -34,6 +34,10 @@ def gaussian_noise_layer(input_layer, std):
   noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32)
   return input_layer + noise
 
+def lstm_cell(lstm_size, keep_prob):
+  lstm = tf.nn.rnn_cell.BasicLSTMCell(lstm_size)
+  drop = tf.nn.rnn_cell.DropoutWrapper(lstm, output_keep_prob=keep_prob)
+  return drop
 
 if __name__ == '__main__':
   import numpy as np
