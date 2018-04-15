@@ -137,6 +137,7 @@ def get_annotation_movement():
 
             try:
                 movement_data = pd.DataFrame(data=moments, columns=movement_headers)
+                movement_data = movement_data.drop_duplicates(subset=['game_clock', 'shot_clock', 'quarter', 'player_id'], inplace=False)
                 annotation_trajectories = get_actions(annotation, movement_data, data_config)
                 if annotation_trajectories is None:
                     missed_count += 1

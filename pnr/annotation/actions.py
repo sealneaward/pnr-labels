@@ -4,6 +4,35 @@ import cPickle as pkl
 
 from pnr.annotation.behaviour import *
 
+def get_player_movement(annotation, movement, player_id, data_config):
+    """
+    Return before and after movement for single player
+    """
+    player_movement = movement.loc[movement.player_id == player_id, :]
+    before_movement = player_movement.loc[
+                      (player_movement.game_clock <= annotation['gameclock'] + 0.6 + int(
+                          data_config['data_config']['tfr'] / data_config['data_config']['frame_rate'])) &
+                      (player_movement.game_clock >= annotation['gameclock'] + 0.6)
+    , :]
+    after_movement = player_movement.loc[
+                     (player_movement.game_clock >= annotation['gameclock'] + 0.6 - int(
+                         data_config['data_config']['tfr'] / data_config['data_config']['frame_rate'])) &
+                     (player_movement.game_clock <= annotation['gameclock'] + 0.6)
+    , :]
+
+    before_movement = before_movement[:data_config['data_config']['tfr']]
+    after_movement = after_movement[:data_config['data_config']['tfr']]
+
+    if len(before_movement) != data_config['data_config']['tfr'] or len(after_movement) != data_config['data_config']['tfr']:
+        return None
+
+    movement = {
+        'before': before_movement,
+        'after': after_movement
+    }
+
+    return movement
+
 def get_action_movement(movement, annotation, data_config):
     """
     Get movement of actions before and after the screen time.
@@ -27,30 +56,26 @@ def get_action_movement(movement, annotation, data_config):
     action_movements['annotation'] = annotation
     action_movements['players'] = []
 
-    player_ids = [
-        annotation['ball_handler'],
-        annotation['ball_defender'],
-        annotation['screen_setter'],
-        annotation['screen_defender']
-    ]
-    for player_id in player_ids:
-        player_movement = movement.loc[movement.player_id == player_id, :]
-        before_movement = player_movement.loc[
-            (player_movement.game_clock <= annotation['gameclock'] + 0.6 + int(data_config['data_config']['tfr'] / data_config['data_config']['frame_rate'])) &
-            (player_movement.game_clock >= annotation['gameclock'] + 0.6)
-        , :]
-        after_movement = player_movement.loc[
-            (player_movement.game_clock >= annotation['gameclock'] + 0.6 - int(data_config['data_config']['tfr'] / data_config['data_config']['frame_rate'])) &
-            (player_movement.game_clock <= annotation['gameclock'] + 0.6)
-        , :]
+    player_ids = {
+        annotation['ball_handler']: 'ball_handler',
+        annotation['ball_defender']: 'ball_defender',
+        annotation['screen_setter']: 'screen_setter',
+        annotation['screen_defender']: 'screen_defender'
+    }
+    for player_id, role in player_ids.items():
+        player_movement = get_player_movement(annotation, movement, player_id, data_config)
+        if player_movement is None:
+            continue
+        else:
+            before_movement = player_movement['before']
+            after_movement = player_movement['after']
+            player_movement = {'before': {'player': before_movement}, 'after': {'player': after_movement}}
 
-        before_movement = before_movement[:data_config['data_config']['tfr']]
-        after_movement = after_movement[:data_config['data_config']['tfr']]
+        for player_id, role in player_ids.items():
+            role_movement = get_player_movement(annotation, movement, player_id, data_config)
+            player_movement['before'][role] = role_movement['before']
+            player_movement['after'][role] = role_movement['after']
 
-        if len(before_movement) != data_config['data_config']['tfr'] or len(after_movement) != data_config['data_config']['tfr']:
-            return None
-
-        player_movement = {'before': before_movement, 'after': after_movement}
         action_movements['players'].append({'player_id': player_id, 'movement': player_movement})
 
     return action_movements

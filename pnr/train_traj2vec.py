@@ -140,6 +140,6 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 500000
-    best_acc_delay = 50000
+    max_iter = 750000
+    best_acc_delay = 250000
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay)

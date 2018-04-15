@@ -78,31 +78,6 @@ def embed(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
     return embeddings
 
-def tsne(embeddings):
-    """
-    Create t-SNE visualizations of player movement
-     in annotations based on embeddings in traj2vec
-
-    Parameters
-    ----------
-    embeddings: np.array
-        embedded information from seq2seq learning
-
-    Returns
-    -------
-    """
-    tsne = TSNE(n_components=2, init='pca', random_state=0)
-    vis_data = tsne.fit_transform(embeddings)
-    vis_x = vis_data[:, 0]
-    vis_y = vis_data[:, 1]
-
-
-    plt.figure()
-    plt.scatter(vis_x, vis_y)
-    plt.show()
-    plt.close()
-
-
 def project_tf(embeddings):
     tf.reset_default_graph()
     sess = tf.InteractiveSession()

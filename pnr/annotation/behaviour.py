@@ -11,8 +11,11 @@ np.seterr(divide='raise', invalid='raise')
 
 
 def convert_movement(movement):
-    movement.loc[movement.x_loc > 47, 'y_loc'] = movement.loc[movement.x_loc > 47, 'y_loc'].apply(lambda y: 50 - y)
-    movement.loc[movement.x_loc > 47, 'x_loc'] = movement.loc[movement.x_loc > 47, 'x_loc'].apply(lambda x: 94 - x)
+    """
+    Convert full court movement to half court movement
+    """
+    # movement.loc[movement.x_loc > 47, 'y_loc'] = movement.loc[movement.x_loc > 47, 'y_loc'].apply(lambda y: 50 - y)
+    # movement.loc[movement.x_loc > 47, 'x_loc'] = movement.loc[movement.x_loc > 47, 'x_loc'].apply(lambda x: 94 - x)
     # movement['x_loc'] = movement['y_loc'].apply(lambda y: 250 * (1 - (y - 0) / (50 - 0)) + -250 * ((y - 0) / (50 - 0)))
     # movement['y_loc'] = movement['x_loc'].apply(lambda x: -47.5 * (1 - (x - 0) / (47 - 0)) + 422.5 * ((x - 0) / (47 - 0)))
 
@@ -22,11 +25,30 @@ def convert_movement(movement):
 def convert_to_half(annotation_movements):
     for anno_ind, annotation in enumerate(annotation_movements):
         for player_ind, player in enumerate(annotation['players']):
-            player['movement']['before'] = convert_movement(player['movement']['before'])
-            player['movement']['after'] = convert_movement(player['movement']['after'])
+            for role, movement in player['movement']['before'].items():
+                player['movement']['before'][role] = convert_movement(movement)
+            for role, movement in player['movement']['before'].items():
+                player['movement']['after'][role] = convert_movement(movement)
             annotation_movements[anno_ind]['players'][player_ind] = player
     return annotation_movements
 
+
+def create_trajectory(movement_dict, type):
+    trajectory = {}
+    trajectory['players'] = {}
+
+    if type == 'before':
+        screen_loc = movement_dict['screen_setter'][['x_loc', 'y_loc']].values[-1]
+    elif type == 'after':
+        screen_loc = movement_dict['screen_setter'][['x_loc', 'y_loc']].values[0]
+    trajectory['screen_loc'] = screen_loc
+    # create new increasing times for game_clock
+    trajectory['game_clock'] = np.arange(0.0, 2.0, 0.04)
+
+    for role, movement in movement_dict.items():
+        trajectory['players'][role] = movement[['x_loc', 'y_loc']].values
+
+    return trajectory
 
 def extract_trajectories(annotation_movements):
     trajectories = []
@@ -34,12 +56,11 @@ def extract_trajectories(annotation_movements):
 
     for annotation in annotation_movements:
         for player in annotation['players']:
-            # create new increasing times for game_clock
-            player['movement']['before']['game_clock'] = np.arange(0.0, 2.0, 0.04)
-            player['movement']['after']['game_clock'] = np.arange(0.0, 2.0, 0.04)
 
-            before_trajectory = player['movement']['before'][['game_clock', 'x_loc', 'y_loc']].values
-            after_trajectory = player['movement']['after'][['game_clock', 'x_loc', 'y_loc']].values
+
+            # TODO edit and create dict for trajectory
+            before_trajectory = create_trajectory(player['movement']['before'], 'before')
+            after_trajectory = create_trajectory(player['movement']['after'], 'after')
 
             # append trajectory and annotation
             trajectories.append(before_trajectory)
@@ -58,6 +79,16 @@ def extract_trajectories(annotation_movements):
     return trajectories, annotations
 
 
+def euclid_dist(location_1, location_2):
+    """
+    Get L2 distance to ball from shot location
+    """
+    distance = (location_1-location_2)**2
+    distance = distance.sum(axis=-1)
+    distance = np.sqrt(distance)
+    return distance
+
+
 def complete_trajectories(trajectories, annotations):
     completed_trajectories = []
     completed_annotations = []
@@ -65,22 +96,53 @@ def complete_trajectories(trajectories, annotations):
     for ind, trajectory in enumerate(trajectories):
         annotation = annotations[ind]
         completed_trajectory = []
-        for i in range(0, len(trajectory)):
+
+        game_clock = trajectory['game_clock']
+        player = trajectory['players']['player']
+        ball_handler = trajectory['players']['ball_handler']
+        ball_defender = trajectory['players']['ball_defender']
+        screen_setter = trajectory['players']['screen_setter']
+        screen_defender = trajectory['players']['screen_defender']
+        hoop = np.zeros(player.shape)
+        screen_loc = np.full(player.shape, trajectory['screen_loc'])
+
+        distance_bh = euclid_dist(player, ball_handler)
+        distance_bd = euclid_dist(player, ball_defender)
+        distance_ss = euclid_dist(player, screen_setter)
+        distance_sd = euclid_dist(player, screen_defender)
+        distance_hoop = euclid_dist(player, hoop)
+        distance_screen_loc = euclid_dist(player, screen_loc)
+
+        for i in range(0, len(trajectory['players']['player'])):
             rec = []
             if i == 0:
-                # time, location_c, speed_c, rot_c
-                rec = [0, 0, 0, 0]
+                # time, location_c, speed_c,
+                # distance_bh, distance_ss,
+                # distance_hoop, distance_screen_loc,
+                # rot_c
+                rec = [0, 0, 0, distance_hoop[i], distance_screen_loc[i], 0]
             else:
-                loc_c = math.sqrt((trajectory[i][1]-trajectory[i-1][1])**2+(trajectory[i][2]-trajectory[i-1][2])**2)
-                rec.append(trajectory[i][0])
+                loc_c = math.sqrt((player[i, 0] - player[i-1, 0])**2+(player[i, 1] - player[i-1, 1])**2)
+                rec.append(game_clock[i])
                 rec.append(loc_c)
-                rec.append(loc_c / (trajectory[i][0] - trajectory[i - 1][0]))
+                rec.append(loc_c / (game_clock[i] - game_clock[i - 1]))
+                # rec.append(distance_bh[i])
+                # rec.append(distance_ss[i])
+                # rec.append(distance_bd[i])
+                # rec.append(distance_sd[i])
+                rec.append(distance_hoop[i])
+                rec.append(distance_screen_loc[i])
+                # rec.append((distance_bh[i] - distance_bh[i-1]) / (game_clock[i] - game_clock[i - 1]))
+                # rec.append((distance_bd[i] - distance_bd[i-1]) / (game_clock[i] - game_clock[i - 1]))
+                # rec.append((distance_ss[i] - distance_ss[i-1]) / (game_clock[i] - game_clock[i - 1]))
+                # rec.append((distance_sd[i] - distance_sd[i-1]) / (game_clock[i] - game_clock[i - 1]))
                 # catch numpy exceptions
                 try:
-                    rec.append(math.atan((trajectory[i][2]-trajectory[i-1][2]) / (trajectory[i][1]-trajectory[i-1][1])))
+                    rec.append(math.atan((player[i, 1] - player[i-1, 1]) / (player[i, 0] - player[i-1, 0])))
                 except Exception as err:
                     rec.append(0)
             completed_trajectory.append(rec)
+        completed_trajectory = np.array(completed_trajectory)
         completed_trajectories.append(completed_trajectory)
         completed_annotations.append(annotation)
 
@@ -91,11 +153,11 @@ def generate_behavior_sequences(features_trajectories):
     behavior_sequences = []
 
     for trajectory_features in tqdm(features_trajectories):
-        # shape = 50, 4
+        # shape = 50, 8
         windows = rolling_window(trajectory_features)
-        # shape = 5, 10, 4
+        # shape = 5, 10, 8
         behavior_sequence = behavior_extract(windows)
-        # shape = 5, 18
+        # shape = 5, 42
         behavior_sequences.append(behavior_sequence)
 
     return behavior_sequences
@@ -124,22 +186,27 @@ def generate_normal_behavior_sequence(behavior_sequences):
 
 def compute_features(completed_trajectories):
     features_trajectories = []
-    for trajectory in tqdm(completed_trajectories):
+    for trajectory in completed_trajectories:
         trajectory_features = []
         for i in range(0,len(trajectory)):
             rec = []
             if i == 0:
-                # time, locationC, speedC, rotC
-                rec = [0, 0, 0, 0]
+                # time, loc_c_rate, diff_loc_c,
+                # diff_dist_bh, diff_dist_bd,
+                # diff_dist_ss, diff_dist_sd,
+                # diff_rot_c
+                rec = [0, 0, 0, 0, 0, 0]
             else:
                 loc_c = trajectory[i][1]
                 loc_c_rate = loc_c / (trajectory[i][0] - trajectory[i-1][0])
                 rec.append(trajectory[i][0])
                 rec.append(loc_c_rate)
-                # TODO check removal of if for loc_c_rate
                 rec.append(trajectory[i][2]-trajectory[i-1][2])
                 rec.append(trajectory[i][3]-trajectory[i-1][3])
+                rec.append(trajectory[i][4]-trajectory[i-1][4])
+                rec.append(trajectory[i][5]-trajectory[i-1][5])
             trajectory_features.append(rec)
+        trajectory_features = np.array(trajectory_features)
         features_trajectories.append(trajectory_features)
         
     return features_trajectories
@@ -179,6 +246,10 @@ def behavior_extract(windows):
                 behaviour_feature.append(description[1][i])
                 behaviour_feature.append(description[2][i])
                 behaviour_feature.append(description[3][i])
+                behaviour_feature.append(description[4][i])
+                behaviour_feature.append(description[5][i])
+                behaviour_feature.append(description[6][i])
+                behaviour_feature.append(description[7][i])
 
             behavior_sequence.append(behaviour_feature)
 
@@ -203,7 +274,7 @@ def get_behaviours(action_movements):
         behaviour vectors for each action identified
     """
     # TODO cleanup
-    # action_movements = convert_to_half(action_movements)
+    action_movements = convert_to_half(action_movements)
     trajectories, annotations = extract_trajectories(action_movements)
     trajectories, annotations = complete_trajectories(trajectories, annotations)
     features = compute_features(trajectories)
