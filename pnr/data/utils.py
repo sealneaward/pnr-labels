@@ -1,7 +1,20 @@
 from __future__ import division
 import numpy as np
 import matplotlib.pyplot as plt
+import requests
+import pandas as pd
 
+
+HEADERS = {
+    'Accept-Encoding': 'gzip, deflate, sdch',
+    'Accept-Language': 'en-US,en;q=0.8',
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'x-nba-stats-token': 'true',
+    'Referer': 'http://stats.nba.com/player/',
+    'Connection': 'keep-alive',
+    'x-nba-stats-origin': 'stats'
+}
 
 def shuffle_2_array(x, y):
     randomize = np.arange(len(x))
@@ -262,3 +275,19 @@ def make_reference_pnr(x, crop_size, ref_type):
     r1 = np.ceil(crop_size[1] / 2).astype('int32') + 1
     reference = reference - np.tile(np.array([r0, r1]),(x.shape[0], x.shape[1], x.shape[2], 1))
     return reference
+
+
+def get_game_info(game_id):
+    """
+    Get standard game information from api call
+    """
+    url = 'http://stats.nba.com/stats/boxscoresummaryv2?GameID=%s' % (game_id)
+    response = requests.get(url, headers=HEADERS)
+    while response.status_code != 200:
+        response = requests.get(url)
+    headers = response.json()['resultSets'][0]['headers']
+    data = response.json()['resultSets'][0]['rowSet']
+    data = pd.DataFrame(data, columns=headers)
+    data = data[['GAME_ID', 'GAMECODE', 'HOME_TEAM_ID', 'VISITOR_TEAM_ID', 'SEASON']].T.squeeze()
+    data['GAMECODE'] = data['GAMECODE'].replace('/', '')
+    return data

@@ -6,6 +6,10 @@ from Team import TeamNotFoundException
 plt = None
 import numpy as np
 import pandas as pd
+import seaborn as sns
+
+from pnr.vis.utils import draw_full_court
+from pnr.data.utils import get_game_info
 import pnr.config as CONFIG
 
 class EventException(Exception):
@@ -316,6 +320,57 @@ class Event:
           writer = Writer(fps=25, metadata=dict(artist='Me'), bitrate=1800)
           anim.save(save_path, writer)
         plt.clf()
+
+    def show_static(self, save_path='', anno=None):
+        import matplotlib.pyplot as plt
+        # Leave some space for inbound passes
+        # ax = plt.axes(xlim=(Constant.X_MIN,Constant.X_MAX), ylim=(Constant.Y_MIN,Constant.Y_MAX))
+        # ax.axis('off')
+        fig = plt.figure(figsize=(15, 7.5))
+        ax = plt.gca()
+        ax = draw_full_court(ax=ax)
+        ax.grid(False)  # Remove grid
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_xlim([0, 94])
+        ax.set_ylim([-50, 0])
+        try:
+          start_moment = self.moments[0]
+        except IndexError as e:
+          raise EventException()
+
+        movement = pd.DataFrame(columns=['player_id', 'team_id', 'x_loc', 'y_loc', 'game_clock', 'color'])
+        for moment in self.moments:
+            for player in moment.players:
+                if player.id in anno.values():
+                    movement = movement.append({
+                        'player_id': player.id,
+                        'team_id': player.team.id,
+                        'x_loc': player.x,
+                        'y_loc': player.y,
+                        'game_clock': moment.game_clock,
+                        'color': player.color
+                    }, ignore_index=True)
+            movement = movement.append({
+                'player_id': -1,
+                'team_id': -1,
+                'x_loc': moment.ball.x,
+                'y_loc': moment.ball.y,
+                'game_clock': moment.game_clock,
+                'color': moment.ball.color
+            }, ignore_index=True)
+
+        players = movement['player_id'].drop_duplicates(inplace=False).values
+        for player in players:
+            player_movement = movement.loc[movement.player_id == player, :]
+            player_color = player_movement['color'].values[0]
+            cm = sns.light_palette(player_color, as_cmap=True)
+            plt.scatter(player_movement.x_loc, -player_movement.y_loc, c=-player_movement.game_clock, cmap=cm, s=100, zorder=1, alpha=1, edgecolors='none')
+
+        fig.show()
+        fig.savefig(save_path, format='pdf', bbox_inches='tight')
+        fig.close()
+
 
 def convert_time(time):
     return '%s:%s' % (int(time/60), int(time % 60))
