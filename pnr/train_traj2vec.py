@@ -83,7 +83,7 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             loader.reset()
             continue
 
-        if iter_ind % 250000 == 0 and iter_ind > 0:
+        if iter_ind % 25000 == 0 and iter_ind > 0:
             lrv *= .1
 
         feed_dict = net.input(batch_xs)
@@ -140,6 +140,6 @@ if __name__ == '__main__':
     exp_name = '%s-X-%s' % (model_name, data_name)
     fold_index = int(arguments['<fold_index>'])
     init_lr = 1e-3
-    max_iter = 750000
-    best_acc_delay = 250000
+    max_iter = 75000
+    best_acc_delay = 25000
     train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, best_acc_delay)

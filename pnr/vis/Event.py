@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from pnr.vis.utils import draw_full_court
+from pnr.vis.utils import draw_full_court, draw_half_court
 from pnr.data.utils import get_game_info
 import pnr.config as CONFIG
 
@@ -321,28 +321,31 @@ class Event:
           anim.save(save_path, writer)
         plt.clf()
 
-    def show_static(self, save_path='', anno=None):
+    def show_static(self, save_path='', anno=None, plot_type='half'):
         import matplotlib.pyplot as plt
-        # Leave some space for inbound passes
-        # ax = plt.axes(xlim=(Constant.X_MIN,Constant.X_MAX), ylim=(Constant.Y_MIN,Constant.Y_MAX))
-        # ax.axis('off')
-        fig = plt.figure(figsize=(15, 7.5))
-        ax = plt.gca()
-        ax = draw_full_court(ax=ax)
-        ax.grid(False)  # Remove grid
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-        ax.set_xlim([0, 94])
-        ax.set_ylim([-50, 0])
-        try:
-          start_moment = self.moments[0]
-        except IndexError as e:
-          raise EventException()
+        if plot_type == 'full':
+            fig = plt.figure(figsize=(15, 7.5))
+            ax = plt.gca()
+            ax = draw_full_court(ax=ax)
+            ax.grid(False)  # Remove grid
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+            ax.set_xlim([0, 94])
+            ax.set_ylim([-50, 0])
+        elif plot_type == 'half':
+            fig = plt.figure(figsize=(12, 11))
+            ax = plt.gca()
+            ax = draw_half_court(ax=ax)
+            ax.grid(False)  # Remove grid
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+            ax.set_xlim([-250, 250])
+            ax.set_ylim([422.5, -47.5])
 
         movement = pd.DataFrame(columns=['player_id', 'team_id', 'x_loc', 'y_loc', 'game_clock', 'color'])
         for moment in self.moments:
             for player in moment.players:
-                if player.id in anno.values():
+                if player.id in [anno['ball_handler'], anno['ball_defender'], anno['screen_setter']]:
                     movement = movement.append({
                         'player_id': player.id,
                         'team_id': player.team.id,
@@ -360,16 +363,46 @@ class Event:
                 'color': moment.ball.color
             }, ignore_index=True)
 
+        if plot_type == 'half':
+            movement.loc[movement.x_loc > 47, 'y_loc'] = movement.loc[movement.x_loc > 47, 'y_loc'].apply(lambda y: 50 - y)
+            movement.loc[movement.x_loc > 47, 'x_loc'] = movement.loc[movement.x_loc > 47, 'x_loc'].apply(lambda x: 94 - x)
+            movement['x_loc_copy'] = movement['x_loc']
+            movement['y_loc_copy'] = movement['y_loc']
+            movement['x_loc'] = movement['y_loc_copy'].apply(lambda y: 250 * (1 - (y - 0) / (50 - 0)) + -250 * ((y - 0) / (50 - 0)))
+            movement['y_loc'] = movement['x_loc_copy'].apply(lambda x: -47.5 * (1 - (x - 0) / (47 - 0)) + 422.5 * ((x - 0) / (47 - 0)))
+            movement = movement.drop('x_loc_copy', axis=1, inplace=False)
+            movement = movement.drop('y_loc_copy', axis=1, inplace=False)
+
         players = movement['player_id'].drop_duplicates(inplace=False).values
         for player in players:
             player_movement = movement.loc[movement.player_id == player, :]
             player_color = player_movement['color'].values[0]
             cm = sns.light_palette(player_color, as_cmap=True)
-            plt.scatter(player_movement.x_loc, -player_movement.y_loc, c=-player_movement.game_clock, cmap=cm, s=100, zorder=1, alpha=1, edgecolors='none')
-
+            if plot_type == 'full':
+                plt.scatter(
+                    player_movement.x_loc,
+                    -player_movement.y_loc,
+                    c=-player_movement.game_clock,
+                    cmap=cm,
+                    s=100,
+                    zorder=1,
+                    alpha=1,
+                    edgecolors='none'
+                )
+            elif plot_type == 'half':
+                plt.scatter(
+                    player_movement.x_loc,
+                    player_movement.y_loc,
+                    c=-player_movement.game_clock,
+                    cmap=cm,
+                    s=200,
+                    zorder=1,
+                    alpha=1,
+                    edgecolors='none'
+                )
         fig.show()
         fig.savefig(save_path, format='pdf', bbox_inches='tight')
-        fig.close()
+        plt.close()
 
 
 def convert_time(time):

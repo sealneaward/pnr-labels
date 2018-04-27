@@ -64,8 +64,6 @@ def embed(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
             embedding = np.squeeze(embedding)
             embedding = embedding[0]
             # get last embedded state
-            # TODO check if having 5 embedded states has a difference on embedding process
-            # traj2vec only has 1 embedded state, I have 5  TODO check
             embeddings.append(embedding)
             embeddings_annotations.append(annotations[0])
         else:  ## done
@@ -98,10 +96,11 @@ def project_tf(embeddings):
     projector.visualize_embeddings(writer, config)
     saver = tf.train.Saver()
     saver.save(sess, os.path.join(CONFIG.logs.dir, 'embed.ckpt'), 1)
+    np.save('%s/embeddings/embeddings' % (sportvu_dir), embeddings)
 
 
 if __name__ == '__main__':
-    from pnr.data.constant import game_dir
+    from pnr.data.constant import game_dir, sportvu_dir
     pnr_dir = os.path.join(game_dir, 'pnr-annotations')
 
     arguments = docopt(__doc__)

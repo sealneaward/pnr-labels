@@ -1,8 +1,8 @@
-"""make_one_game.py
+"""make_one_game_vis.py
 
 Usage:
-    make_one_game.py --annotate --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
-    make_one_game.py --from_raw --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius> <raw_file>
+    make_one_game_vis.py --annotate --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius>
+    make_one_game_vis.py --from_raw --gameid <gameid> <index> <dir-prefix> <pnr-prefix> <time-frame-radius> <raw_file>
 
 Arguments:
     <index> not a very good way of doing things, this is the index into os.listdir
@@ -17,7 +17,7 @@ Options:
     --from_raw: use raw predictions to plot animation of pnr
 
 Example:
-    python make_one_game.py --from_raw --gameid 0021500408 1 viz raw 75 from-raw-examples.pkl
+    python make_one_game_vis.py --from_raw --gameid 0021500408 1 viz raw 75 from-raw-examples.pkl
 """
 
 from pnr.annotation import annotation

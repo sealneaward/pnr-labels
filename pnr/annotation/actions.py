@@ -64,6 +64,7 @@ def get_action_movement(movement, annotation, data_config):
     }
     for player_id, role in player_ids.items():
         player_movement = get_player_movement(annotation, movement, player_id, data_config)
+        player = copy(player_id)
         if player_movement is None:
             continue
         else:
@@ -76,7 +77,7 @@ def get_action_movement(movement, annotation, data_config):
             player_movement['before'][role] = role_movement['before']
             player_movement['after'][role] = role_movement['after']
 
-        action_movements['players'].append({'player_id': player_id, 'movement': player_movement})
+        action_movements['players'].append({'player_id': player, 'movement': player_movement})
 
     return action_movements
 

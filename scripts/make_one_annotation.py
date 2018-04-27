@@ -19,6 +19,7 @@ from pnr.annotation import annotation
 from pnr import data
 from pnr.vis.Event import Event, EventException
 
+from copy import copy
 import os
 from docopt import docopt
 import pandas as pd
@@ -78,7 +79,12 @@ def render_one_anno(raw_data, directory, anno_id):
         ## render
         try:
             e.sequence_around_t(anno, int(arguments['<time-frame-radius>']), pnr=True)
-            e.show_static(os.path.join(directory, '%i-pnr-%i-before.pdf' %(anno_id, ind)), anno=anno)
+            before = copy(e)
+            after = copy(e)
+            before.moments = before.moments[:int(arguments['<time-frame-radius>'])]
+            after.moments = after.moments[int(arguments['<time-frame-radius>']):]
+            before.show_static(os.path.join(directory, '%i-pnr-%i-before.pdf' %(anno_id, ind)), anno=anno)
+            after.show_static(os.path.join(directory, '%i-pnr-%i-after.pdf' % (anno_id, ind)), anno=anno)
         except EventException as e:
             print ('malformed sequence, skipping')
             continue

@@ -21,6 +21,8 @@ from sklearn.cluster import DBSCAN
 from sklearn import metrics
 from sklearn.preprocessing import StandardScaler
 import yaml
+from copy import copy
+import cPickle as pkl
 
 import pnr.config as CONFIG
 from pnr.plots.plot import plot_action
@@ -51,7 +53,7 @@ def cluster_db(data):
 
     # #############################################################################
     # Compute DBSCAN
-    db = DBSCAN(eps=0.105, min_samples=30).fit(X)
+    db = DBSCAN(eps=0.105, min_samples=40).fit(X)
     core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
     core_samples_mask[db.core_sample_indices_] = True
     labels = db.labels_
@@ -91,7 +93,7 @@ def cluster_db(data):
     return db.labels_
 
 
-def cluster_kmeans(data):
+def cluster_kmeans(data, n_clusters=20):
     """
     Use KMeans in 3D space to find best number of cluster for action types.
 
@@ -107,27 +109,12 @@ def cluster_kmeans(data):
     """
     X = StandardScaler().fit_transform(data)
 
-    est = KMeans(n_clusters=9)
-    fig = plt.figure(figsize=(4, 3))
-    ax = Axes3D(fig, rect=[0, 0, .95, 1], elev=48, azim=134)
-    est.fit(X)
-    labels = est.labels_
-
-    ax.scatter(X[:, 0], X[:, 1], X[:, 2], c=labels.astype(np.float), edgecolor='k')
-
-    ax.w_xaxis.set_ticklabels([])
-    ax.w_yaxis.set_ticklabels([])
-    ax.w_zaxis.set_ticklabels([])
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('Player Actions Identified')
-    ax.dist = 12
-
-    fig.show()
-    plt.close()
+    km = KMeans(n_clusters=n_clusters)
+    km.fit(X)
+    labels = km.labels_
 
     return labels
+
 
 
 
@@ -154,7 +141,7 @@ def vis_labels(annotations, clusters, data_config):
     annotations['gameid'] = '00' + annotations['gameid'].astype(int).astype(str).values
     action_types = annotations['label'].drop_duplicates(inplace=False).values
 
-    action_types = [8, 9]
+    action_types = [14]
     for action_type in action_types:
         action_annotations = annotations.loc[annotations.label == action_type, :]
         game_ids = annotations['gameid'].drop_duplicates(inplace=False).values
@@ -165,6 +152,57 @@ def vis_labels(annotations, clusters, data_config):
 
                 plot_action(game, action, game_id, data_config)
 
+
+def make_vectors(annotations, clusters, data_config):
+    """
+    Create a "paragraph vector" of the actions identified.
+
+    Parameters
+    ----------
+    annotations: list of dicts
+        information about actions, including cluster ids
+    clusters: np.array
+        action label information
+    data_config: dict
+        configuration for annotations
+
+    Returns
+    -------
+    sentences: np.array
+        information for a single annotation on the 4 roles and the 2 seperate actions they perform in a pnr
+
+    """
+    for ind, annotation in enumerate(annotations):
+        label = copy(clusters[ind])
+        annotation['label'] = label
+        annotations[ind] = annotation
+
+    annotations = pd.DataFrame.from_records(annotations)
+    unique_annotations = annotations[[
+        'gameid',
+        'eid',
+        'quarter',
+        'gameclock',
+        'ball_handler',
+        'ball_defender',
+        'screen_setter',
+        'screen_defender'
+    ]].drop_duplicates(inplace=False)
+    annotations_dict = {}
+
+    for ind, unique_annotation in unique_annotations.iterrows():
+        annotations_at_id = annotations.loc[
+            (annotations.gameid == unique_annotation['gameid']) &
+            (annotations.quarter == unique_annotation['quarter']) &
+            (annotations.gameclock == unique_annotation['gameclock'])
+        ,:]
+
+        labels = annotations_at_id['label'].values
+        annotations_dict[ind] = {}
+        annotations_dict[ind]['actions'] = labels
+        annotations_dict[ind]['annotation'] = unique_annotation
+
+    pkl.dump(annotations_dict, open(os.path.join(pnr_dir, 'roles/vectors.pkl'), 'wb'))
 
 if __name__ == '__main__':
     from pnr.data.constant import sportvu_dir, game_dir
@@ -179,8 +217,10 @@ if __name__ == '__main__':
     data_config = yaml.load(open(f_data_config, 'rb'))
 
     annotations = pd.read_pickle('%s/roles/annotations.pkl' % (pnr_dir))
+    embeddings = np.load(open('%s/embeddings/embeddings.npy' % (sportvu_dir), 'rb'))
     data = json.load(open('%s/embeddings/%s' % (sportvu_dir, 'embedding_actions.txt'), 'r'))
     data = clean_data(data)
-    # clusters = cluster_kmeans(data)
-    clusters = cluster_db(data)
-    vis_labels(annotations, clusters, data_config)
+    clusters = cluster_kmeans(data)
+    # clusters = cluster_db(embeddings)
+    # vis_labels(annotations, clusters, data_config)
+    make_vectors(annotations, clusters, data_config)

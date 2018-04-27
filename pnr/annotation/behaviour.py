@@ -16,8 +16,12 @@ def convert_movement(movement):
     """
     # movement.loc[movement.x_loc > 47, 'y_loc'] = movement.loc[movement.x_loc > 47, 'y_loc'].apply(lambda y: 50 - y)
     # movement.loc[movement.x_loc > 47, 'x_loc'] = movement.loc[movement.x_loc > 47, 'x_loc'].apply(lambda x: 94 - x)
+    # movement['x_loc_copy'] = movement['x_loc']
+    # movement['y_loc_copy'] = movement['y_loc']
     # movement['x_loc'] = movement['y_loc'].apply(lambda y: 250 * (1 - (y - 0) / (50 - 0)) + -250 * ((y - 0) / (50 - 0)))
     # movement['y_loc'] = movement['x_loc'].apply(lambda x: -47.5 * (1 - (x - 0) / (47 - 0)) + 422.5 * ((x - 0) / (47 - 0)))
+    # movement = movement.drop('x_loc_copy', axis=1, inplace=False)
+    # movement = movement.drop('y_loc_copy', axis=1, inplace=False)
 
     return movement
 
@@ -26,9 +30,11 @@ def convert_to_half(annotation_movements):
     for anno_ind, annotation in enumerate(annotation_movements):
         for player_ind, player in enumerate(annotation['players']):
             for role, movement in player['movement']['before'].items():
-                player['movement']['before'][role] = convert_movement(movement)
-            for role, movement in player['movement']['before'].items():
-                player['movement']['after'][role] = convert_movement(movement)
+                movement = convert_movement(movement)
+                player['movement']['before'][role] = copy(movement)
+            for role, movement in player['movement']['after'].items():
+                movement = convert_movement(movement)
+                player['movement']['after'][role] = copy(movement)
             annotation_movements[anno_ind]['players'][player_ind] = player
     return annotation_movements
 
@@ -67,7 +73,7 @@ def extract_trajectories(annotation_movements):
             trajectories.append(after_trajectory)
 
             # append annotations for before and after for player
-            annotation['annotation']['player_id'] = player['player_id']
+            annotation['annotation']['player_id'] = copy(player['player_id'])
             annotation['annotation']['action'] = 'before'
             before_annotation = copy(annotation['annotation'])
             annotations.append(before_annotation)
@@ -118,29 +124,23 @@ def complete_trajectories(trajectories, annotations):
             if i == 0:
                 # time, location_c, speed_c,
                 # distance_bh, distance_ss,
-                # distance_hoop, distance_screen_loc,
                 # rot_c
-                rec = [0, 0, 0, distance_hoop[i], distance_screen_loc[i], 0]
+                # rec = [0, 0, 0, 0]
+                rec = [game_clock[i], distance_bh[i], distance_ss[i], distance_hoop[i], distance_screen_loc[i]]
             else:
                 loc_c = math.sqrt((player[i, 0] - player[i-1, 0])**2+(player[i, 1] - player[i-1, 1])**2)
                 rec.append(game_clock[i])
-                rec.append(loc_c)
-                rec.append(loc_c / (game_clock[i] - game_clock[i - 1]))
-                # rec.append(distance_bh[i])
-                # rec.append(distance_ss[i])
-                # rec.append(distance_bd[i])
-                # rec.append(distance_sd[i])
+                # rec.append(loc_c)
+                # rec.append(loc_c / (game_clock[i] - game_clock[i - 1]))
+                rec.append(distance_bh[i])
+                rec.append(distance_ss[i])
                 rec.append(distance_hoop[i])
                 rec.append(distance_screen_loc[i])
-                # rec.append((distance_bh[i] - distance_bh[i-1]) / (game_clock[i] - game_clock[i - 1]))
-                # rec.append((distance_bd[i] - distance_bd[i-1]) / (game_clock[i] - game_clock[i - 1]))
-                # rec.append((distance_ss[i] - distance_ss[i-1]) / (game_clock[i] - game_clock[i - 1]))
-                # rec.append((distance_sd[i] - distance_sd[i-1]) / (game_clock[i] - game_clock[i - 1]))
                 # catch numpy exceptions
-                try:
-                    rec.append(math.atan((player[i, 1] - player[i-1, 1]) / (player[i, 0] - player[i-1, 0])))
-                except Exception as err:
-                    rec.append(0)
+                # try:
+                #     # rec.append(math.atan((player[i, 1] - player[i-1, 1]) / (player[i, 0] - player[i-1, 0])))
+                # except Exception as err:
+                #     rec.append(0)
             completed_trajectory.append(rec)
         completed_trajectory = np.array(completed_trajectory)
         completed_trajectories.append(completed_trajectory)
@@ -192,19 +192,19 @@ def compute_features(completed_trajectories):
             rec = []
             if i == 0:
                 # time, loc_c_rate, diff_loc_c,
-                # diff_dist_bh, diff_dist_bd,
-                # diff_dist_ss, diff_dist_sd,
+                # diff_dist_bh, diff_dist_ss,
+                # diff_dist_hoop, diff_dist_screen_loc,
                 # diff_rot_c
                 rec = [0, 0, 0, 0, 0, 0]
             else:
                 loc_c = trajectory[i][1]
                 loc_c_rate = loc_c / (trajectory[i][0] - trajectory[i-1][0])
                 rec.append(trajectory[i][0])
-                rec.append(loc_c_rate)
-                rec.append(trajectory[i][2]-trajectory[i-1][2])
-                rec.append(trajectory[i][3]-trajectory[i-1][3])
-                rec.append(trajectory[i][4]-trajectory[i-1][4])
-                rec.append(trajectory[i][5]-trajectory[i-1][5])
+                # rec.append(loc_c_rate)
+                rec.append(trajectory[i][1] - trajectory[i-1][1])
+                rec.append(trajectory[i][2] - trajectory[i-1][2])
+                rec.append(trajectory[i][3] - trajectory[i-1][3])
+                rec.append(trajectory[i][4] - trajectory[i-1][4])
             trajectory_features.append(rec)
         trajectory_features = np.array(trajectory_features)
         features_trajectories.append(trajectory_features)
@@ -247,9 +247,6 @@ def behavior_extract(windows):
                 behaviour_feature.append(description[2][i])
                 behaviour_feature.append(description[3][i])
                 behaviour_feature.append(description[4][i])
-                behaviour_feature.append(description[5][i])
-                behaviour_feature.append(description[6][i])
-                behaviour_feature.append(description[7][i])
 
             behavior_sequence.append(behaviour_feature)
 
