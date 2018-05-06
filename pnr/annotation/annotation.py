@@ -41,7 +41,7 @@ def gameclock_to_str(gameclock):
     """
     Float to minute:second
     """
-    return '%d:%d' % (int(gameclock/60), int(gameclock % 60))
+    return '%d:%d%d' % (int(gameclock/60), int((gameclock % 60)/10), int((gameclock % 60) % 10))
 
 
 def read_annotation(fpath):
@@ -92,7 +92,7 @@ def prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir):
         if not os.path.isfile(os.path.join(pnr_dir,game_anno_base)):
             continue
         game_id = game_anno_base.split('.')[0].split('-')[1]
-        raw_data = pd.read_pkl(os.path.join(game_dir, game_id+'.pkl'))
+        raw_data = pd.read_pickle(os.path.join(game_dir, game_id+'.pkl'))
         fpath = os.path.join(pnr_dir, game_anno_base)
         anno = read_annotation(fpath)
         for k, v in anno.items():
@@ -101,7 +101,8 @@ def prepare_gt_file_from_raw_label_dir(pnr_dir, game_dir):
             gt_entries = []
             q = raw_data['events'][k]['quarter']
             for vi in v:
-                gt_entries.append({'gameid':game_id, 'quarter':q, 'gameclock':vi, 'eid':k})
+                vi_str = gameclock_to_str(vi)
+                gt_entries.append({'gameid': game_id, 'quarter': q, 'gameclock': vi, 'gameclock_str': vi_str, 'eid': k})
             gt += gt_entries
     return gt
 
@@ -218,7 +219,7 @@ if __name__ == '__main__':
 
     from pnr.data.constant import game_dir
     pnr_dir = os.path.join(game_dir, 'pnr-annotations')
-    # script_anno_rev0()
+    script_anno_rev0()
     # annotate_roles()
-    get_annotation_movement()
-    # raw_to_gt_format()
+    # get_annotation_movement()
+    raw_to_gt_format()

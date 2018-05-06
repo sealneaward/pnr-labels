@@ -67,7 +67,7 @@ class Event:
         guest_players = pd.DataFrame(event['visitor']['players'])
 
         self.home_players = home_players.loc[home_players.playerid.isin(start_moment_ids), :].T.to_dict().values()
-        self.guest_players = guest_players.loc[home_players.playerid.isin(start_moment_ids), :].T.to_dict().values()
+        self.guest_players = guest_players.loc[guest_players.playerid.isin(start_moment_ids), :].T.to_dict().values()
         self.players = self.home_players + self.guest_players
 
         player_ids = [player['playerid'] for player in self.players]
@@ -192,16 +192,16 @@ class Event:
         for j, circle in enumerate(player_circles):
             try:
                 circle.center = moment.players[j].x, moment.players[j].y
-            except:
-                raise EventException()
+                annotations[j].set_position(circle.center)
+                clock_test = 'Quarter {:d}\n {:02d}:{:02d}\n {:03.1f}'.format(
+                    moment.quarter,
+                    int(moment.game_clock) % 3600 // 60,
+                    int(moment.game_clock) % 60,
+                    moment.shot_clock)
+                clock_info.set_text(clock_test)
 
-            annotations[j].set_position(circle.center)
-            clock_test = 'Quarter {:d}\n {:02d}:{:02d}\n {:03.1f}'.format(
-                moment.quarter,
-                int(moment.game_clock) % 3600 // 60,
-                int(moment.game_clock) % 60,
-                moment.shot_clock)
-            clock_info.set_text(clock_test)
+            except Exception as err:
+                raise EventException()
         ball_circle.center = moment.ball.x, moment.ball.y
         ball_circle.radius = moment.ball.radius / Constant.NORMALIZATION_COEF
         x = np.arange(Constant.X_MIN, Constant.X_MAX, 1)
@@ -249,39 +249,39 @@ class Event:
 
         # Prepare table
         sorted_players = sorted(start_moment.players, key=lambda player: player.team.id)
-
-        home_player = sorted_players[0]
-        guest_player = sorted_players[5]
-        column_labels = tuple([home_player.team.name, guest_player.team.name])
-        column_colours = tuple([home_player.team.color, guest_player.team.color])
-        cell_colours = [column_colours for _ in range(5)]
-
-        home_players = [' #'.join([player_dict[player['playerid']][0], str(player_dict[player['playerid']][1])]) for player in self.home_players]
-        guest_players = [' #'.join([player_dict[player['playerid']][0], str(player_dict[player['playerid']][1])]) for player in self.guest_players]
-        players_data = list(zip(home_players, guest_players))
-
-        try:
-          table = plt.table(
-              cellText=players_data,
-              colLabels=column_labels,
-              colColours=column_colours,
-              colWidths=[Constant.COL_WIDTH, Constant.COL_WIDTH],
-              loc='bottom',
-              cellColours=cell_colours,
-              fontsize=Constant.FONTSIZE,
-              cellLoc='center'
-          )
-        except ValueError as e:
-          raise EventException() ### unknown error, probably malformed sequence
-        else:
-          pass
-        finally:
-          pass
-
-        table.scale(1, Constant.SCALE)
-        table_cells = table.properties()['child_artists']
-        for cell in table_cells:
-            cell._text.set_color('white')
+        #
+        # home_player = sorted_players[0]
+        # guest_player = sorted_players[5]
+        # column_labels = tuple([home_player.team.name, guest_player.team.name])
+        # column_colours = tuple([home_player.team.color, guest_player.team.color])
+        # cell_colours = [column_colours for _ in range(5)]
+        #
+        # home_players = [' #'.join([player_dict[player['playerid']][0], str(player_dict[player['playerid']][1])]) for player in self.home_players]
+        # guest_players = [' #'.join([player_dict[player['playerid']][0], str(player_dict[player['playerid']][1])]) for player in self.guest_players]
+        # players_data = list(zip(home_players, guest_players))
+        #
+        # try:
+        #   table = plt.table(
+        #       cellText=players_data,
+        #       colLabels=column_labels,
+        #       colColours=column_colours,
+        #       colWidths=[Constant.COL_WIDTH, Constant.COL_WIDTH],
+        #       loc='bottom',
+        #       cellColours=cell_colours,
+        #       fontsize=Constant.FONTSIZE,
+        #       cellLoc='center'
+        #   )
+        # except ValueError as e:
+        #   raise EventException() ### unknown error, probably malformed sequence
+        # else:
+        #   pass
+        # finally:
+        # #   pass
+        #
+        # table.scale(1, Constant.SCALE)
+        # table_cells = table.properties()['child_artists']
+        # for cell in table_cells:
+        #     cell._text.set_color('white')
 
         player_circles = [
             plt.Circle((0, 0), Constant.PLAYER_CIRCLE_SIZE, color=player.color)
@@ -345,7 +345,8 @@ class Event:
         movement = pd.DataFrame(columns=['player_id', 'team_id', 'x_loc', 'y_loc', 'game_clock', 'color'])
         for moment in self.moments:
             for player in moment.players:
-                if player.id in [anno['ball_handler'], anno['ball_defender'], anno['screen_setter']]:
+                if player.id in [anno['screen_defender']]:
+                    # , anno['ball_defender'], anno['screen_setter']]:
                     movement = movement.append({
                         'player_id': player.id,
                         'team_id': player.team.id,
@@ -375,6 +376,8 @@ class Event:
 
         players = movement['player_id'].drop_duplicates(inplace=False).values
         for player in players:
+            if player == -1:
+                continue
             player_movement = movement.loc[movement.player_id == player, :]
             player_color = player_movement['color'].values[0]
             cm = sns.light_palette(player_color, as_cmap=True)
