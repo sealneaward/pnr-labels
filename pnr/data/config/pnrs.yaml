@@ -15,8 +15,8 @@ data_config:
   tfr: 50
   frame_rate: 25
 extractor_config:
-  crop: bmf
-  crop_size: [25, 25]
+  crop_crop: bmf
+  size: [25, 25]
   d0flip: true
   d1flip: true
   jitter: [1, 1]
@@ -29,9 +29,17 @@ headers: {Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/w
   Connection: keep-alive, Upgrade-Insecure-Requests: '1', User-Agent: 'Mozilla/5.0
     (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87
     Safari/537.36'}
-n_classes: 2
+n_classes: 20
 n_negative_examples: 3000
+n_clusters: 200
+embedded_type: 'traj2vec_domain'
+n_init: 50
 no_extract: true
 node1: 1
 preproc_dir: rev3_1
 randseed: 1
+topics:
+  0: over
+  1: under
+  3: switch
+  2: trap

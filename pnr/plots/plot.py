@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle, Arc
+import os
+
+from pnr.data.utils import limit_to_half
+import pnr.config as CONFIG
 
 movement_headers = [
     "team_id",
@@ -18,8 +22,6 @@ movement_headers = [
 
 def plot_action(game, annotation, game_id, data_config):
     """
-
-
     """
 
     moments = []
@@ -34,21 +36,25 @@ def plot_action(game, annotation, game_id, data_config):
 
     if annotation['action'] == 'before':
         movement = movement.loc[
-            (movement.game_clock <= (annotation['gameclock'] + 0.6 + int(data_config['data_config']['tfr'] / data_config['data_config']['frame_rate']))) &
-            (movement.game_clock >= annotation['gameclock'] + 0.6) &
-            (movement.player_id == annotation['player_id']),
-        :]
+            (movement.game_clock <= (annotation['gameclock'] + 0.6 + int(int(data_config['data_config']['tfr']) / int(data_config['data_config']['frame_rate'])))) &
+            (movement.game_clock >= (annotation['gameclock'] + 0.6)) &
+            (movement.quarter == annotation['quarter'])
+        , :]
     elif annotation['action'] == 'after':
         movement = movement.loc[
-            (movement.game_clock >= (annotation['gameclock'] + 0.6 - int(data_config['data_config']['tfr'] / data_config['data_config']['frame_rate']))) &
-            (movement.game_clock <= annotation['gameclock'] + 0.6) &
-            (movement.quarter == annotation['quarter']) &
-            (movement.player_id == annotation['player_id']),
-        :]
+            (movement.game_clock >= (annotation['gameclock'] + 0.6 - int(data_config['data_config']['tfr'] / int(data_config['data_config']['frame_rate'])))) &
+            (movement.game_clock <= (annotation['gameclock'] + 0.6)) &
+            (movement.quarter == annotation['quarter'])
+        , :]
+
+    screen_loc = movement.loc[movement.player_id == annotation['screen_setter'], ['x_loc', 'y_loc']].values[-1]
+    movement = movement.loc[movement.player_id == annotation['player_id'], :]
+    movement = limit_to_half(movement, screen_loc)
+
     movement = full_to_half_full(movement)
     movement = half_full_to_half(movement)
 
-    plt.figure(figsize=(12, 11))
+    fig = plt.figure(figsize=(12, 11))
     plt.scatter(movement.x_loc, movement.y_loc, c=movement.game_clock, cmap=plt.cm.Blues, s=250, zorder=1)
 
     draw_half_court()
@@ -59,7 +65,21 @@ def plot_action(game, annotation, game_id, data_config):
     plt.ylim(422.5, -47.5)
     # get rid of axis tick labels
     # plt.tick_params(labelbottom=False, labelleft=False)
-    plt.show()
+    # plt.show()
+
+    dir = '%s/%s/plots/%s/' % (CONFIG.plots.dir, 'actions', annotation['label'])
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+    fig.savefig('%s/%s/plots/%s/00%s_%s_%s_%s.png' % (
+        CONFIG.plots.dir,
+        'actions',
+        str(int(annotation['label'])),
+        str(int(annotation['gameid'])),
+        str(int(annotation['eid'])),
+        str(int(annotation['gameclock'])),
+        str(int(annotation['player_id']))
+    ))
     plt.close()
 
 

@@ -19,3 +19,17 @@ else:
 python setup.py build
 python setup.py install
 ```
+
+# Pick and Roll Classification
+
+1. Download and extract the sportvu data from [here *insert link later*]() to the previous `data_dir`
+
+2. Process sequences of pnr annotations
+```
+python make_sequences_from_sportvu.py
+```
+
+3. Train classifer 
+```
+
+```

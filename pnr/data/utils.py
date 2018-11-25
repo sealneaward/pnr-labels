@@ -23,6 +23,39 @@ def shuffle_2_array(x, y):
     y = y[randomize]
     return x, y
 
+
+def limit_to_half(movement, screen_loc):
+    """
+    limit movement of player to single side of court where the hoop is for the pnr
+    """
+    hoop = get_hoop_location(screen_loc[0])
+    if hoop[0] == 88.65:
+        # movement loc_x can only be > 47
+        if len(movement.loc[movement.x_loc < 47, :]) > 0:
+            new_movement = movement.iloc[np.argmin(np.abs(movement['x_loc'].values - 47.5))][['x_loc', 'y_loc']].values
+            movement.loc[movement.x_loc < 47, ['x_loc', 'y_loc']] = new_movement
+    else:
+        # movement loc_x can only be < 47
+        if len(movement.loc[movement.x_loc > 47, :]) > 0:
+            new_movement = movement.iloc[np.argmin(np.abs(movement['x_loc'].values - 46.5))][['x_loc', 'y_loc']].values
+            movement.loc[movement.x_loc > 47, ['x_loc', 'y_loc']] = new_movement
+
+    return movement
+
+def get_hoop_location(ball_loc_x):
+    """
+    Use hard logic to determine which half of court hoop is in.
+    """
+    if ball_loc_x > 47:
+        hoop_loc_x = 88.65
+        hoop_loc_y = 25
+    else:
+        hoop_loc_x = 5.35
+        hoop_loc_y = 25
+
+    return [hoop_loc_x, hoop_loc_y]
+
+
 def scale_last_dim(s, d1_range=100,d2_range=50,upscale=False):
     if upscale:
         d1_range = 1/d1_range

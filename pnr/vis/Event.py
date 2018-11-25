@@ -37,7 +37,7 @@ class Event:
     """A class for handling and showing events"""
 
     def __init__(self, event, anno):
-        self.gameid = anno['gameid']
+        self.gameid = '00' + str(int(anno['gameid']))
         self.home_team_id = event['home']['teamid']
         self.away_team_id = event['visitor']['teamid']
         self.moments = []
@@ -345,8 +345,12 @@ class Event:
         movement = pd.DataFrame(columns=['player_id', 'team_id', 'x_loc', 'y_loc', 'game_clock', 'color'])
         for moment in self.moments:
             for player in moment.players:
-                if player.id in [anno['screen_defender']]:
-                    # , anno['ball_defender'], anno['screen_setter']]:
+                if player.id in [
+                    # anno['screen_defender'],
+                    # anno['ball_defender'],
+                    anno['ball_handler'],
+                    # anno['screen_setter']
+                ]:
                     movement = movement.append({
                         'player_id': player.id,
                         'team_id': player.team.id,

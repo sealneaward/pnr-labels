@@ -173,6 +173,9 @@ def train(data_config, model_config, exp_name, fold_index, init_lr, max_iter, be
 
             feed_dict = net.input(val_x, 1, False)
             feed_dict[y_] = val_t
+            val_true = val_t[val_t[:, 1] == 1]
+            val_false = val_t[val_t[:, 0] == 1]
+
             summary, val_ce, val_accuracy = sess.run([merged, cross_entropy, accuracy], feed_dict=feed_dict)
             val_writer.add_summary(summary, iter_ind)
             print("step %d, training accuracy %g, validation accuracy %g, \n train ce %g,  val ce %g" %
